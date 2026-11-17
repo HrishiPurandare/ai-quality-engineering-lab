@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "date": "2026-11-17",
+    "judge_model": "llama3.2:3b",
+    "chat_model": "llama3.2:3b",
+    "items": 6,
+    "minutes": 12.6
+  },
+  "summary": {
+    "faithfulness": {
+      "mean": 1.0,
+      "pass_rate": 1.0,
+      "judged": 2,
+      "errors": 4
+    },
+    "answer_relevancy": {
+      "mean": 0.611,
+      "pass_rate": 0.333,
+      "judged": 6,
+      "errors": 0
+    },
+    "contextual_precision": {
+      "mean": 0.986,
+      "pass_rate": 1.0,
+      "judged": 6,
+      "errors": 0
+    },
+    "contextual_recall": {
+      "mean": 0.783,
+      "pass_rate": 0.667,
+      "judged": 6,
+      "errors": 0
+    }
+  }
+}

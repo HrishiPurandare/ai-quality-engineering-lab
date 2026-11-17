@@ -66,7 +66,13 @@ def build_metrics(judge_model: str, threshold: float) -> dict:
     )
     from deepeval.models import OllamaModel
 
-    judge = OllamaModel(model=judge_model, base_url=settings.ollama_url, temperature=0)
+    # num_predict caps the reply: small models in JSON mode sometimes generate until they time out.
+    judge = OllamaModel(
+        model=judge_model,
+        base_url=settings.ollama_url,
+        temperature=0,
+        generation_kwargs={"num_predict": 768},
+    )
     # async_mode=False: one judge call at a time, so an 8 GB machine doesn't run out of memory.
     common = {"model": judge, "threshold": threshold, "include_reason": True, "async_mode": False}
     return {
