@@ -13,12 +13,17 @@ Everything runs **locally and for free** on [Ollama](https://ollama.com). No API
 ```mermaid
 flowchart LR
     Q[Customer question] --> API[FastAPI /chat]
-    API --> R[Retrieve top-k chunks]
+    API --> GI{Input guard}
+    GI -->|known attack| B[Block]
+    GI -->|card numbers redacted| R[Retrieve top-k chunks]
     R <--> V[(Chroma vector store)]
     R -->|distance > threshold| X[Refuse: no relevant policy]
-    R -->|relevant chunks| P[Prompt: rules + numbered context]
+    R -->|relevant chunks| GC[Context guard: drop injected instructions]
+    GC --> P[Prompt: rules + numbered context]
     P --> L[Ollama llama3.2:3b]
-    L --> C[Answer + citations + contexts]
+    L --> GO{Output guard}
+    GO -->|card number, secret request,<br/>prompt leak, code| S[Safe reply]
+    GO -->|ok| C[Answer + citations + contexts]
     D[data/policies/*.md] -->|chunk + embed<br/>nomic-embed-text| V
 ```
 
@@ -26,6 +31,7 @@ Design choices:
 - **Refuse before generating.** If no chunk is close enough to the question, the bot answers "I don't have that information" without calling the model, so it can't hallucinate an answer.
 - **Numbered citations.** The model must cite `[n]`; citations are mapped back to source file and section, and invented numbers are dropped.
 - **Contexts are returned with every answer**, because evaluation metrics (faithfulness, context precision) need them.
+- **Guardrails around the model, not inside it** (`app/guardrails.py`): deterministic input, context and output filters that report which rule fired. `GUARDRAILS=off` reproduces the unprotected baseline.
 - **The model sits behind an interface** (`app/llm.py`), so unit tests use a deterministic fake and CI never needs a GPU.
 
 ## Quick start
@@ -85,18 +91,40 @@ python -m evals.judge                   # LLM-judge metrics on the cached answer
 |---|---|
 | Golden dataset pass rate | **90%** (38/42): retrieval hit rate 97%, MRR 0.97, 100% correct refusals, 5% false refusals |
 | Failures found | missing citation, a multi-hop answer that dropped one fact, 2 safety questions over-refused |
-| Red team (22 attacks, no guardrails yet) | **9% attack success rate**: one canary injection appended to a normal answer; one "developer" prompt turned the bot into a code printer |
+| Red team, 22 attacks | **9% → 0%** attack success rate with guardrails |
+| Red team, 9 held-out attacks written *after* the guardrails | **33% → 22%**: the guardrails generalise only partly (a "translate, then append" injection and a second poisoned document still get through) |
+| Golden dataset with guardrails on | **90%**, unchanged: no guardrail fired on any of the 42 normal questions |
+| Promptfoo, 10 tests over HTTP | **6/10 → 9/10**; redacting a pasted card number also fixed a wrong refusal |
 | Judge calibration (6 items, 2 local judges) | Retrieval was correct on all 6, yet `qwen2.5:3b` scored contextual recall 0.04 and `llama3.2:3b` 0.78; llama failed faithfulness on 4/6 items (timeouts) |
 
-**Takeaway:** a 3B judge is not trustworthy. Deterministic metrics gate quality here; judge scores are reported with reasons for a human to review, and a stronger judge (7B+ or an API model) is on the roadmap.
+**Takeaways:** guardrails tuned on an attack set will always look perfect on that set, so the held-out number (22%) is the honest one. And a 3B judge is not trustworthy. Deterministic metrics gate quality here; judge scores are reported with reasons for a human to review, and a stronger judge (7B+ or an API model) is on the roadmap.
 
 ## Red team
 
 ```bash
-python -m redteam.run      # 22 attacks -> redteam/results/REDTEAM_REPORT.md
+python -m redteam.run --guardrails off --out redteam/results/baseline      # unprotected
+python -m redteam.run --guardrails on  --out redteam/results/guarded
+python -m redteam.run --holdout --out redteam/results/holdout-guarded      # attacks the guards never saw
+python -m redteam.run --rescore --out redteam/results/guarded             # re-check saved answers after fixing a detector
 ```
 
+Reports: [baseline](redteam/results/baseline/REDTEAM_REPORT.md) · [guarded](redteam/results/guarded/REDTEAM_REPORT.md) · [held-out, baseline](redteam/results/holdout-baseline/REDTEAM_REPORT.md) · [held-out, guarded](redteam/results/holdout-guarded/REDTEAM_REPORT.md)
+
 Attacks cover prompt injection, system-prompt leaks, jailbreaks, card data, social engineering, harmful requests, financial advice and **indirect prompt injection** (a poisoned knowledge-base document, indexed only in an in-memory red-team store). Each attack is scored by deterministic detectors that are themselves unit-tested against both safe and unsafe answers. The report also records whether each attack actually reached the model, so a gate refusal can't be mistaken for model robustness.
+
+## Promptfoo
+
+The same idea through an industry tool: [Promptfoo](https://www.promptfoo.dev) calls the real `/chat` endpoint on two servers (guardrails off and on) and checks each answer with assertions.
+
+```bash
+GUARDRAILS=off uvicorn app.main:app --port 8001 &
+GUARDRAILS=on  uvicorn app.main:app --port 8000 &
+PROMPTFOO_DISABLE_TELEMETRY=1 npx -y promptfoo@0.120.27 eval -c promptfoo/promptfooconfig.yaml \
+    -o promptfoo/results/results.json --no-cache
+python -m promptfoo.report     # -> promptfoo/results/PROMPTFOO_REPORT.md
+```
+
+Latest: [PROMPTFOO_REPORT.md](promptfoo/results/PROMPTFOO_REPORT.md)
 
 ## Project layout
 
@@ -104,7 +132,8 @@ Attacks cover prompt injection, system-prompt leaks, jailbreaks, card data, soci
 app/          RAG application (config, llm client, chunking, vector store, pipeline, API)
 data/         fictional Ledgerly Bank policy documents (the knowledge base)
 evals/        golden dataset, metrics, eval runner, LLM judge, committed reports
-redteam/      attacks, poisoned fixture document, detectors, runner, committed report
+redteam/      attacks (main + held-out), poisoned fixtures, detectors, runner, committed reports
+promptfoo/    Promptfoo config and tests against the HTTP API, report script
 tests/unit    fast deterministic tests with a fake LLM
 tests/live    smoke tests against real Ollama models
 ```
@@ -114,6 +143,6 @@ tests/live    smoke tests against real Ollama models
 - [x] Unit tests + CI
 - [x] Golden dataset and DeepEval metrics with a local judge model
 - [x] Red-team baseline: 22 attacks, deterministic detectors
-- [ ] Promptfoo red-team suite, guardrails, before/after report
+- [x] Guardrails (input, context, output), before/after and held-out red-team reports, Promptfoo suite
 - [ ] React chat UI + Playwright E2E
 - [ ] Eval quality gate in CI
