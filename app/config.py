@@ -28,6 +28,9 @@ class Settings:
     max_distance: float = float(os.getenv("MAX_DISTANCE", "0.50"))
     temperature: float = float(os.getenv("TEMPERATURE", "0"))
     request_timeout: float = float(os.getenv("REQUEST_TIMEOUT", "120"))
+    # Input/context/output filters around the model (app/guardrails.py). On by default;
+    # GUARDRAILS=off reproduces the unprotected baseline for red-team comparisons.
+    guardrails: bool = os.getenv("GUARDRAILS", "on").lower() != "off"
 
 
 settings = Settings()

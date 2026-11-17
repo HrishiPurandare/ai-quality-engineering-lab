@@ -61,6 +61,7 @@ def evaluate_item(pipeline: RAGPipeline, item: GoldenItem) -> tuple[dict, ItemSc
         "retrieved": [
             {"source": h.source, "section": h.section, "distance": round(h.distance, 3)} for h in raw_hits
         ],
+        "guardrails": answer.guardrails,
         "latency_s": latency,
         "passed": score.passed,
     }
@@ -84,6 +85,7 @@ def main() -> None:
     )
     parser.add_argument("--limit", type=int, help="only run the first N items")
     parser.add_argument("--out", type=Path, default=RESULTS_DIR)
+    parser.add_argument("--guardrails", choices=["on", "off"], default="on" if settings.guardrails else "off")
     args = parser.parse_args()
 
     items = load_golden()
@@ -97,7 +99,7 @@ def main() -> None:
         raise SystemExit(f"Ollama is not reachable at {settings.ollama_url}. Start it with: ollama serve")
     store = build_store(llm)
     ingest(store, settings)  # always evaluate against a fresh index of the current documents
-    pipeline = RAGPipeline(store, llm, settings.top_k, settings.max_distance)
+    pipeline = RAGPipeline(store, llm, settings.top_k, settings.max_distance, args.guardrails == "on")
 
     records, scores = run(pipeline, items)
     meta = {
@@ -106,6 +108,7 @@ def main() -> None:
         "embed_model": settings.embed_model,
         "top_k": settings.top_k,
         "max_distance": settings.max_distance,
+        "guardrails": args.guardrails,
         "chunk_size": settings.chunk_size,
         "machine": f"{platform.system()} {platform.machine()}",
         "avg_latency_s": round(sum(r["latency_s"] for r in records) / len(records), 2),

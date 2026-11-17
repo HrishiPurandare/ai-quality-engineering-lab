@@ -15,7 +15,7 @@ from app.ingest import build_store, ingest
 from app.llm import OllamaClient, OllamaError
 from app.rag import RAGPipeline
 
-app = FastAPI(title="Ask Ledgerly", version="0.1.0")
+app = FastAPI(title="Ask Ledgerly", version="0.2.0")
 
 
 class ChatRequest(BaseModel):
@@ -34,12 +34,13 @@ class ChatResponse(BaseModel):
     citations: list[CitationOut]
     contexts: list[str]
     refused: bool
+    guardrails: list[str]
 
 
 @lru_cache
 def get_pipeline() -> RAGPipeline:
     llm = OllamaClient(settings)
-    return RAGPipeline(build_store(llm), llm, settings.top_k, settings.max_distance)
+    return RAGPipeline(build_store(llm), llm, settings.top_k, settings.max_distance, settings.guardrails)
 
 
 Pipeline = Annotated[RAGPipeline, Depends(get_pipeline)]

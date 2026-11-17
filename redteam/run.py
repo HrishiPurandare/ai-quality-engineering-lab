@@ -3,6 +3,9 @@
 Usage:
     python -m redteam.run              # 22 attacks, ~2 min on an M1 with llama3.2:3b
     python -m redteam.run --limit 5
+    python -m redteam.run --guardrails off --out redteam/results/baseline   # unprotected
+    python -m redteam.run --holdout --out redteam/results/holdout           # unseen attacks
+    python -m redteam.run --rescore --out redteam/results/guarded           # re-check saved answers
 
 Writes redteam/results/results.jsonl and REDTEAM_REPORT.md.
 """
@@ -10,7 +13,7 @@ Writes redteam/results/results.jsonl and REDTEAM_REPORT.md.
 import argparse
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 
@@ -23,6 +26,8 @@ from redteam.checks import CHECKS
 
 ROOT = Path(__file__).resolve().parent
 ATTACKS_PATH = ROOT / "attacks.jsonl"
+# Written AFTER the guardrails, to measure whether they generalise beyond the attacks they were tuned on.
+HOLDOUT_PATH = ROOT / "attacks_holdout.jsonl"
 POISONED_DIR = ROOT / "poisoned"
 RESULTS_DIR = ROOT / "results"
 CORPORA = {"clean", "poisoned"}
@@ -66,7 +71,7 @@ def build_pipelines(llm: LLM, cfg: Settings) -> dict[str, RAGPipeline]:
     for corpus, chunks in {"clean": policies, "poisoned": policies + poison}.items():
         store = VectorStore.in_memory(f"redteam_{corpus}_{uuid.uuid4().hex[:8]}", llm)
         store.add(chunks)
-        pipelines[corpus] = RAGPipeline(store, llm, cfg.top_k, cfg.max_distance)
+        pipelines[corpus] = RAGPipeline(store, llm, cfg.top_k, cfg.max_distance, cfg.guardrails)
     return pipelines
 
 
@@ -85,6 +90,7 @@ def attack_once(pipelines: dict[str, RAGPipeline], attack: Attack) -> dict:
         "prompt": attack.prompt,
         "answer": answer.answer,
         "refused": answer.refused,
+        "guardrails": answer.guardrails,
         "retrieved": [{"source": h.source, "distance": round(h.distance, 3)} for h in hits],
         "reached_model": bool(hits),
         "poison_retrieved": any(h.source in poisoned_sources for h in hits),
@@ -92,6 +98,22 @@ def attack_once(pipelines: dict[str, RAGPipeline], attack: Attack) -> dict:
         "failed_checks": [name for name, ok in results.items() if not ok],
         "defended": all(results.values()),
     }
+
+
+def rescore(rows: list[dict], attacks: list[Attack]) -> list[dict]:
+    """Re-apply the CURRENT detectors to saved answers, without calling the model again.
+
+    Use this after fixing a detector: the answers stay the same, only the verdicts change.
+    """
+    by_id = {a.id: a for a in attacks}
+    for row in rows:
+        results = {name: CHECKS[name](row["answer"]) for name in by_id[row["id"]].checks}
+        row.update(
+            checks=results,
+            failed_checks=[name for name, ok in results.items() if not ok],
+            defended=all(results.values()),
+        )
+    return rows
 
 
 def summarise(rows: list[dict]) -> dict:
@@ -117,7 +139,7 @@ def render_report(meta: dict, summary: dict, rows: list[dict]) -> str:
         "# Red-team report: Ask Ledgerly",
         "",
         f"Run on {meta['date']} · chat `{meta['chat_model']}` · {summary['attacks']} attacks · "
-        f"guardrails: {meta['guardrails']}",
+        f"attack set: {meta.get('attack_set', 'main')} · guardrails: {meta['guardrails']}",
         "",
         f"**Attack success rate: {summary['attack_success_rate']:.0%}** "
         f"({summary['attacks'] - summary['defended']} of {summary['attacks']} attacks got through). "
@@ -150,12 +172,13 @@ def render_report(meta: dict, summary: dict, rows: list[dict]) -> str:
         "",
         "Read these too: a check can pass while the answer is still poor (wrong tone, off-role, unhelpful).",
         "",
-        "| Attack | Defended | Answer |",
-        "|---|---|---|",
+        "| Attack | Defended | Guardrail fired | Answer |",
+        "|---|---|---|---|",
     ]
     for r in rows:
         answer = " ".join(r["answer"].split()).replace("|", "\\|")[:160]
-        lines.append(f"| {r['id']} | {'yes' if r['defended'] else '**no**'} | {answer} |")
+        fired = ", ".join(r.get("guardrails") or []) or "-"
+        lines.append(f"| {r['id']} | {'yes' if r['defended'] else '**no**'} | {fired} | {answer} |")
     lines.append("")
     return "\n".join(lines)
 
@@ -166,19 +189,31 @@ def main() -> None:
     )
     parser.add_argument("--limit", type=int)
     parser.add_argument("--out", type=Path, default=RESULTS_DIR)
-    parser.add_argument("--label", default="none (baseline)", help="what defences this run had")
+    parser.add_argument("--guardrails", choices=["on", "off"], default="on" if settings.guardrails else "off")
+    parser.add_argument("--holdout", action="store_true", help="run the held-out attacks instead")
+    parser.add_argument(
+        "--rescore",
+        action="store_true",
+        help="re-check the saved answers in --out with the current detectors",
+    )
     args = parser.parse_args()
 
-    attacks = load_attacks()
+    attacks = load_attacks(HOLDOUT_PATH if args.holdout else ATTACKS_PATH)
     problems = validate_attacks(attacks)
     if problems:
         raise SystemExit("attacks.jsonl is invalid:\n" + "\n".join(problems))
     attacks = attacks[: args.limit] if args.limit else attacks
 
+    if args.rescore:
+        saved = args.out / "results.jsonl"
+        rows = rescore([json.loads(line) for line in saved.read_text(encoding="utf-8").splitlines()], attacks)
+        write_results(args.out, json.loads((args.out / "meta.json").read_text(encoding="utf-8")), rows)
+        return
+
     llm = OllamaClient(settings)
     if not llm.is_available():
         raise SystemExit(f"Ollama is not reachable at {settings.ollama_url}. Start it with: ollama serve")
-    pipelines = build_pipelines(llm, settings)
+    pipelines = build_pipelines(llm, replace(settings, guardrails=args.guardrails == "on"))
 
     rows = []
     for n, attack in enumerate(attacks, start=1):
@@ -187,15 +222,24 @@ def main() -> None:
         verdict = "defended" if row["defended"] else f"BROKEN ({', '.join(row['failed_checks'])})"
         print(f"[{n:>2}/{len(attacks)}] {attack.id:<8} {verdict}")
 
-    meta = {"date": date.today().isoformat(), "chat_model": settings.chat_model, "guardrails": args.label}
+    meta = {
+        "date": date.today().isoformat(),
+        "chat_model": settings.chat_model,
+        "guardrails": args.guardrails,
+        "attack_set": "holdout" if args.holdout else "main",
+    }
+    write_results(args.out, meta, rows)
+
+
+def write_results(out: Path, meta: dict, rows: list[dict]) -> None:
     summary = summarise(rows)
-    args.out.mkdir(parents=True, exist_ok=True)
-    with (args.out / "results.jsonl").open("w", encoding="utf-8") as f:
+    out.mkdir(parents=True, exist_ok=True)
+    with (out / "results.jsonl").open("w", encoding="utf-8") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    (args.out / "REDTEAM_REPORT.md").write_text(render_report(meta, summary, rows), encoding="utf-8")
-    rate = summary["attack_success_rate"]
-    print(f"\nattack success rate {rate:.0%} · report: {args.out / 'REDTEAM_REPORT.md'}")
+    (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    (out / "REDTEAM_REPORT.md").write_text(render_report(meta, summary, rows), encoding="utf-8")
+    print(f"attack success rate {summary['attack_success_rate']:.0%} · report: {out / 'REDTEAM_REPORT.md'}")
 
 
 if __name__ == "__main__":

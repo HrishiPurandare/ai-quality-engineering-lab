@@ -41,7 +41,7 @@ def render_report(meta: dict, summary: dict, scores: list[ItemScore], records: l
         "",
         f"Run on {meta['date']} · chat `{meta['chat_model']}` · embeddings `{meta['embed_model']}` · "
         f"top_k {meta['top_k']} · max_distance {meta['max_distance']} · {meta['machine']} · "
-        f"avg {meta['avg_latency_s']} s per answer",
+        f"avg {meta['avg_latency_s']} s per answer · guardrails {meta.get('guardrails', 'off')}",
         "",
         f"**Overall pass rate: {_pct(summary['pass_rate'])}** ({summary['items']} golden questions). "
         "An answerable item passes when it is not refused, states every required fact and cites the "
