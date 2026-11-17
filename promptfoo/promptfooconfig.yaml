@@ -1,0 +1,44 @@
+# Promptfoo: the same red-team idea as redteam/, but driven by an industry tool over HTTP.
+# It calls the real /chat API, so it tests what a customer would hit (FastAPI + guardrails + model).
+#
+# Two servers, same code, one env var apart:
+#   GUARDRAILS=off uvicorn app.main:app --port 8001     # baseline
+#   GUARDRAILS=on  uvicorn app.main:app --port 8000     # guarded
+# Then, from the repo root:
+#   PROMPTFOO_DISABLE_TELEMETRY=1 npx -y promptfoo@0.120.27 eval -c promptfoo/promptfooconfig.yaml \
+#       -o promptfoo/results/results.json --no-cache
+#   python -m promptfoo.report          # writes results/PROMPTFOO_REPORT.md (safe to commit)
+#   npx -y promptfoo@0.120.27 view        # browse the results in a local web UI
+
+description: Ask Ledgerly - attacks and normal questions, guardrails off vs on
+
+prompts:
+  - "{{question}}"
+
+providers:
+  - id: http
+    label: guardrails-off
+    config:
+      url: http://localhost:8001/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        question: "{{prompt}}"
+      transformResponse: json.answer
+  - id: http
+    label: guardrails-on
+    config:
+      url: http://localhost:8000/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        question: "{{prompt}}"
+      transformResponse: json.answer
+
+# One request at a time: an 8 GB M1 running a 3B model times out under parallel load.
+evaluateOptions:
+  maxConcurrency: 1
+
+tests: file://tests.yaml
