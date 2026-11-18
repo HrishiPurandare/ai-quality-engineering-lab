@@ -4,7 +4,9 @@
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![LLM](https://img.shields.io/badge/LLM-Ollama%20(local)-black)
 
-How do you **test** an AI chatbot? This lab answers that hands-on. It contains a small RAG (retrieval-augmented generation) banking assistant, **Ask Ledgerly**, and a growing test suite around it: unit tests, LLM evaluations, red-teaming and CI quality gates.
+How do you **test** an AI chatbot? This lab answers that hands-on. It contains a small RAG (retrieval-augmented generation) banking assistant, **Ask Ledgerly**, with a React chat UI, and a growing test suite around it: unit tests, LLM evaluations, red-teaming, guardrails, Playwright end-to-end tests and CI quality gates.
+
+![Ask Ledgerly chat UI: a cited answer, a blocked prompt injection, and an out-of-scope refusal](docs/chat-ui.png)
 
 Everything runs **locally and for free** on [Ollama](https://ollama.com). No API keys, and no customer data leaves the machine. Ledgerly Bank is fictional; its policy documents are invented test data.
 
@@ -12,7 +14,7 @@ Everything runs **locally and for free** on [Ollama](https://ollama.com). No API
 
 ```mermaid
 flowchart LR
-    Q[Customer question] --> API[FastAPI /chat]
+    Q[Customer: React chat UI] --> API[FastAPI /chat]
     API --> GI{Input guard}
     GI -->|known attack| B[Block]
     GI -->|card numbers redacted| R[Retrieve top-k chunks]
@@ -46,6 +48,9 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 python -m app.ingest                 # build the vector index
 uvicorn app.main:app --reload        # API docs at http://localhost:8000/docs
+
+# 3. Chat UI (second terminal; Node 22)
+cd web && npm ci && npm run dev      # http://localhost:5173
 ```
 
 ```bash
@@ -66,8 +71,10 @@ pytest -m live         # smoke tests against the real local model
 | Live smoke | Real model answers a known fact with a citation, refuses off-topic questions, never asks for an OTP | ✅ |
 | Evals: deterministic | 42-item golden dataset: retrieval hit rate and MRR, required facts, citations, correct and false refusals | ✅ |
 | Evals: LLM judge | Faithfulness, answer relevancy, contextual precision and recall (DeepEval, local `qwen2.5:3b` judge) | ✅ |
-| Red team | 22 attacks in 8 categories, incl. indirect injection via a poisoned document; deterministic detectors (canaries, Luhn, n-gram leak) | ✅ baseline |
-| Red team: Promptfoo + guardrails | Promptfoo attack plugins, input/output guardrails, before/after numbers | 🔜 |
+| Red team | 22 attacks in 8 categories plus 9 held-out, incl. indirect injection via poisoned documents; deterministic detectors (canaries, Luhn, n-gram leak) | ✅ |
+| Guardrails + Promptfoo | Input, context and output guardrails; before/after numbers; Promptfoo suite over HTTP | ✅ |
+| E2E: mocked API | 18 Playwright tests (desktop + mobile): answers and sources, refusals, guardrail badges, errors and recovery, double-send, length limit, XSS | ✅ CI |
+| E2E: live stack | Playwright through the real UI, API and model; semantic assertions (embedding similarity) plus exact key facts from the golden dataset | ✅ local |
 | E2E | React chat UI driven by Playwright, with semantic assertions | 🔜 |
 | CI gates | Eval scores must stay above thresholds on every PR | 🔜 |
 
@@ -126,6 +133,18 @@ python -m promptfoo.report     # -> promptfoo/results/PROMPTFOO_REPORT.md
 
 Latest: [PROMPTFOO_REPORT.md](promptfoo/results/PROMPTFOO_REPORT.md)
 
+## End-to-end tests (Playwright)
+
+```bash
+cd web
+npm run test:e2e         # mocked API, desktop + mobile, ~10 s, runs in CI
+npm run test:e2e:live    # real stack (needs Ollama; starts the API itself), ~30 s
+```
+
+Two kinds of E2E test, because a chatbot UI has two kinds of risk:
+- **Mocked** (`web/e2e/mocked`): the API is faked with `page.route()`, so tests are fast and exact. They cover what the *UI* does with every kind of response: sources, refusals, guardrail badges, HTTP errors, slow answers, and model output containing HTML.
+- **Live** (`web/e2e/live`): real answers change from run to run, so they're checked by **meaning** (cosine similarity of `nomic-embed-text` embeddings, threshold 0.70, via a custom `toMeanTheSameAs` matcher) **plus the exact key facts** from the golden dataset. Calibration showed why both are needed: "AED 500" scored 0.97 against the expected "AED 50", higher than the correct answer (0.77). Embeddings don't see numbers.
+
 ## Project layout
 
 ```
@@ -134,6 +153,7 @@ data/         fictional Ledgerly Bank policy documents (the knowledge base)
 evals/        golden dataset, metrics, eval runner, LLM judge, committed reports
 redteam/      attacks (main + held-out), poisoned fixtures, detectors, runner, committed reports
 promptfoo/    Promptfoo config and tests against the HTTP API, report script
+web/          React + Vite chat UI, Playwright E2E (page object, API mocks, semantic matcher)
 tests/unit    fast deterministic tests with a fake LLM
 tests/live    smoke tests against real Ollama models
 ```
@@ -144,5 +164,5 @@ tests/live    smoke tests against real Ollama models
 - [x] Golden dataset and DeepEval metrics with a local judge model
 - [x] Red-team baseline: 22 attacks, deterministic detectors
 - [x] Guardrails (input, context, output), before/after and held-out red-team reports, Promptfoo suite
-- [ ] React chat UI + Playwright E2E
+- [x] React chat UI + Playwright E2E (mocked in CI, live with semantic assertions)
 - [ ] Eval quality gate in CI

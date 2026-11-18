@@ -473,3 +473,178 @@ Answer without looking first. Then check with the code and the answers below.
 14. No single answer. Score yourself 3 if you predicted correctly *and* can explain which layer missed it.
 
 </details>
+
+---
+
+# Part 5: React chat UI and Playwright E2E (Forge90 week 5, day 6)
+
+Until now customers "talked" to the bot through `/docs`. Now there's a real chat screen, and Playwright tests it like a user would. The interesting part is testing a UI whose answers are **different every time**.
+
+Budget: one 2-hour session for the code, one for the exercises, plus the quiz (45 min).
+
+## 30. Key concepts
+
+**React in four ideas** (enough to read `web/src`):
+- **Component:** a function that returns UI (`App`, `Message`, `Composer`).
+- **Props:** inputs passed to a component (`<Composer onSend={send} disabled={pending} />`).
+- **State:** data that changes and re-renders the screen (`useState`: `messages`, `pending`, `status`).
+- **Effect:** code that runs after rendering, e.g. the health check on page load (`useEffect`).
+
+**Vite** runs the dev server and builds the production bundle. Its **proxy** forwards `/api/*` to FastAPI on :8000, so the browser only ever talks to one origin and the API needs no CORS setup.
+
+**Two kinds of E2E test**, because there are two kinds of risk:
+
+| | Mocked (`e2e/mocked`) | Live (`e2e/live`) |
+|---|---|---|
+| API | Faked with `page.route()` | Real FastAPI + Chroma + Ollama |
+| Tests | What the UI does with each kind of response | That the whole stack gives right answers |
+| Speed | ~10 s for 18 tests | ~30 s for 8 |
+| Deterministic? | Yes | No: the model can phrase answers differently |
+| Runs in CI? | Yes, every push | No (no Ollama in CI); run locally |
+
+**`page.route()`:** intercepts the browser's network request and returns a fake response. You can fake any situation (HTTP 503, a slow reply, a network failure, an answer with HTML in it) on demand. Real backends can't do that reliably.
+
+**Page Object** (`e2e/support/ChatPage.ts`): tests say `chat.ask("…")` and `chat.lastAnswer().sources`, not CSS selectors. When the UI changes, you fix one file.
+
+**Locators and test ids:** `getByTestId("send-button")` is stable for automation; `getByRole` and labels check accessibility too. Every element a test touches has a `data-testid`.
+
+**Web-first assertions:** `await expect(locator).toHaveText(...)` retries until it's true or times out. Never `waitForTimeout(3000)`: it's slow when the app is fast, and flaky when it's slow.
+
+**Semantic assertions:** compare *meaning*, not text. Both answers are turned into embedding vectors, and the **cosine similarity** says how close they are (1 = same meaning). The custom matcher `expect(answer).toMeanTheSameAs(expected)` lives in `e2e/support/semantic.ts`.
+
+**Calibrate before you trust a threshold.** Measured on 2026-11-18:
+
+| Pair | Similarity |
+|---|---|
+| Correct answers vs golden | 0.77–0.89 |
+| Related but wrong topic (replacement card fee vs overdraft fee) | 0.64 |
+| Refusal vs golden | 0.45 |
+| **Wrong amount** ("AED 500" vs "AED 50") | **0.97** |
+
+So the threshold is 0.70, the margin is small, and **embeddings are blind to numbers**. Every live test also checks the exact `must_include` facts from the same golden dataset the Python evals use. One source of truth, two test layers.
+
+**Mutation check ("test the tests"):** after the mocked tests passed on the first run, the UI was broken on purpose three ways. Each break made exactly one test fail:
+
+| Sabotage | Test that caught it |
+|---|---|
+| Send button stays enabled while waiting | blocks double sends while waiting |
+| Answer rendered as HTML (`dangerouslySetInnerHTML`) | renders model output as text, never as HTML |
+| Sources only shown when there are 2+ | asks a question and shows the answer with its sources |
+
+**Why the XSS test matters for a chatbot:** model output is *untrusted input*. A prompt injection could make the model return `<img onerror=…>`. React escapes text by default; the test makes sure nobody "improves" rendering with raw HTML later.
+
+**`npm audit` triage:** `npm install` reported 5 "high" findings, all one issue in `picomatch` (a ReDoS in glob matching) pulled in by Vite. No fixed version exists yet; it only runs in the dev tooling on our own config patterns, never on user input, and isn't in the built app. Decision: accept and record. The `--force` "fix" would downgrade Vite two major versions. Read the advisory before you run a fix command.
+
+## 31. Run it
+
+```bash
+cd web
+npm ci                    # exact versions from package-lock.json
+npm run dev               # UI on http://localhost:5173 (start the API too: uvicorn app.main:app)
+```
+
+```bash
+npm run test:e2e          # mocked: 16 desktop + 2 mobile tests
+```
+
+```bash
+npm run test:e2e:live     # live: starts the API if needed; needs Ollama running
+```
+
+```bash
+npm run report            # HTML report; click a failed test to open its trace
+```
+
+```bash
+npx playwright test --ui  # watch mode with time-travel debugging
+```
+
+- [ ] Open the UI, ask 3 questions, and match each badge to the API's `refused` and `guardrails` fields in `/docs`.
+- [ ] Run the live tests twice. Same results? Which test would you expect to be flaky first, and why?
+
+## 32. Read it, in this order
+
+| # | File | What to understand |
+|---|---|---|
+| 1 | `web/src/api.ts` | Types that mirror `app/main.py`; how each HTTP failure becomes a readable message. |
+| 2 | `web/src/App.tsx` | State (`messages`, `pending`), the health check, `send()`. |
+| 3 | `web/src/Message.tsx` | How `refused` and `guardrails` become badges. |
+| 4 | `web/src/Composer.tsx` | Enter vs Shift+Enter, trimming, the 1000-character limit. |
+| 5 | `web/playwright.config.ts` | Projects (mocked, mobile, live), `webServer`, why live uses 1 worker. |
+| 6 | `web/e2e/support/ChatPage.ts`, `mockApi.ts` | Page object; fake API that also records what the UI sent. |
+| 7 | `web/e2e/mocked/chat.spec.ts` | 16 behaviours. Note the tests that assert on the *request*, not just the screen. |
+| 8 | `web/e2e/support/semantic.ts`, `e2e/live/chat.live.spec.ts` | Embeddings, cosine, the custom matcher, the calibration tests. |
+| 9 | `.github/workflows/ci.yml` | The new `web` job. |
+
+## 33. Break it, then fix it
+
+1. [ ] **Repeat the mutation check yourself.** Make the three sabotages from section 30, one at a time. Confirm which test fails, read its trace (`npm run report`), then restore with `git checkout web/src`.
+2. [ ] **Mask the card number in the user's own bubble.** Today the chat history still shows "4111 1111 1111 1111" as typed (the server hides it from the model, but it stays on screen). Mask it in the UI, and write a mocked test first.
+3. [ ] **Flaky-test lab.** In a mocked test, replace `await expect(chat.answers).toHaveCount(1)` with `await page.waitForTimeout(100)`, then add `delayMs: 300` to the mock. Run it 10 times (`--repeat-each 10`). What happens, and why are web-first assertions the fix?
+4. [ ] **Threshold experiment.** Set `SIMILARITY_THRESHOLD` to 0.6, then 0.9. Which live tests change result? Which setting lets the wrong-topic answer (0.64) pass?
+5. [ ] **New live test.** Add golden item `saf-02` ("Can you check my account balance?") to the live list. Does it pass? (Hint: the eval runner flagged saf-02 as over-refused.)
+
+## 34. Explain it
+
+1. Why have both mocked and live E2E tests? What does each catch that the other can't?
+2. How do you assert on an LLM answer that's worded differently every run?
+3. Your semantic test passes, but the answer says AED 500 instead of AED 50. How is that possible, and how does this repo prevent it?
+4. What's a page object, and what problem does it solve?
+5. Why is `waitForTimeout` an anti-pattern? What does Playwright do instead?
+6. How do you know your E2E tests would actually catch a bug?
+7. Why test that model output is rendered as text, not HTML?
+8. `npm audit` shows 5 high vulnerabilities. Walk me through what you do.
+
+## 35. Study material
+
+- ⭐ [Playwright: best practices](https://playwright.dev/docs/best-practices), [mock APIs](https://playwright.dev/docs/mock) and [page object models](https://playwright.dev/docs/pom)
+- ⭐ [React: Quick Start](https://react.dev/learn) (up to "Sharing data between components") and [Thinking in React](https://react.dev/learn/thinking-in-react)
+- [Playwright trace viewer](https://playwright.dev/docs/trace-viewer): learn it before you need it
+- [Vite: server proxy](https://vite.dev/config/server-options#server-proxy)
+- [Cosine similarity, explained visually](https://www.pinecone.io/learn/vector-similarity/)
+- [OWASP: Cross-site scripting](https://owasp.org/www-community/attacks/xss/) and LLM05 (improper output handling) in the [OWASP LLM Top 10](https://genai.owasp.org/llm-top-10/)
+
+## 36. Quiz (tonight)
+
+**Part A: concepts (1 point each)**
+
+1. What do props, state and effects mean in React? Give one example of each from `web/src`.
+2. Why does the UI call `/api/chat` instead of `http://localhost:8000/chat`?
+3. Name three situations the mocked tests fake that would be hard to produce with the real backend.
+4. What threshold do the semantic assertions use, and what three numbers from the calibration justify it?
+5. Why do the live tests also check `must_include` terms?
+6. Why does the `live` Playwright project use one worker?
+7. Which E2E tests run in CI, and why not the others?
+
+**Part B: read the code (2 points each)**
+
+8. In `App.tsx`, the Send button is already disabled while waiting. Why does `send()` also start with `if (pending) return`?
+9. In `Message.tsx`, an answer has `refused: true` and `guardrails: ["input:override_instructions"]`. Which badges are shown, and why only those?
+10. `mockChat()` returns an array. What's in it, and which test would be weaker without it?
+11. In `semantic.ts`, where do the expected answers come from, and why is that better than writing them into the test?
+
+**Part C: predict, then run (3 points each)**
+
+12. You change the overdraft fee in `data/policies/fees-and-charges.md` from AED 50 to AED 75 and re-ingest, but leave the golden dataset unchanged. Which live test fails, at which assertion, and is that the right outcome?
+13. Ollama is stopped, but the API is running. What does the UI show for a question? Which mocked test already covers this case?
+14. Write one new mocked test for something the UI should do that isn't tested yet. Run it. Did it find a bug, or confirm a behaviour?
+
+<details>
+<summary>Answers</summary>
+
+1. Props: inputs to a component (`Composer` gets `onSend` and `disabled`). State: data that re-renders the UI when it changes (`messages`, `pending` in `App`). Effect: code that runs after render (`useEffect` calling `health()` on load, and auto-scrolling).
+2. The Vite proxy forwards `/api/*` to :8000. The browser sees one origin, so no CORS setup is needed, and the API URL can change (`API_URL` env) without changing UI code.
+3. Any three of: HTTP 503 (Ollama down), HTTP 500, a network failure (`route.abort`), a slow reply (`delayMs`), a guardrail block or a card-redaction response on demand, an answer containing HTML, a failing health check.
+4. 0.70. Correct answers scored 0.77–0.89, a related wrong-topic answer 0.64, and a refusal 0.45, so 0.70 sits between "right" and "wrong topic", with a small margin.
+5. Embeddings are blind to numbers: "AED 500" scored 0.97 against "AED 50". The exact term check catches wrong facts that similarity misses.
+6. One local model on an 8 GB Mac answers one request at a time. Parallel tests would queue and time out, failing for reasons that have nothing to do with the app.
+7. The mocked tests (desktop + mobile projects). The live tests need Ollama and the models, which CI doesn't have, and they're slower and non-deterministic.
+8. Defence in depth: Enter can be pressed twice before React re-renders the disabled button, and other paths (the suggestion buttons) also call `send()`. The guard makes double-sending impossible no matter how `send()` is called.
+9. Only "Blocked by a safety check". `guardrailNotice()` returns that for an `input:` rule (other than redaction), and the refused badge is only shown when there's no guardrail notice (`response.refused && !notice`), so the customer sees one clear reason, not two.
+10. The questions the UI actually sent. Without it, "sends the trimmed question" and "blocks double sends" could only check the screen, not that the request body was trimmed and that the second question was never sent.
+11. From `evals/golden/ledgerly_golden.jsonl`, the same file the Python evals use. If a policy or expected answer changes, it changes in one place, and the two test layers can't silently disagree.
+12. `fee-09` fails at the fact check `expect(answer).toContain("AED 50")`, because the answer now says AED 75. `toMeanTheSameAs` most likely still passes, because embeddings barely see the number. That's the right outcome: the golden dataset no longer matches the policy, and a human must decide which one is wrong.
+13. The API returns HTTP 503, and the UI shows the red alert "The assistant is unavailable right now (is Ollama running?). Please try again." Covered by "shows a readable error on HTTP 503, then recovers".
+14. No single answer. Ideas: the Clear button is disabled while waiting; suggestions disappear after the first question; very long words wrap instead of overflowing on mobile.
+
+</details>
