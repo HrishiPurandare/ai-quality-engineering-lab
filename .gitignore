@@ -11,3 +11,7 @@ __pycache__/
 .vscode/
 reports/
 promptfoo/results/results.json
+web/node_modules/
+web/dist/
+web/playwright-report/
+web/test-results/
