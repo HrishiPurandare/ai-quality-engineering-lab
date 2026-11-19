@@ -1,0 +1,107 @@
+name: Quality gate
+
+# Runs the real model on a smoke set of golden questions and the red-team attacks, then fails the
+# build if any rule in evals/quality_gate.json breaks. Same model as local runs (llama3.2:3b), so
+# the thresholds mean the same thing here and on a laptop. CPU only, so it runs on changes that can
+# move answer quality, nightly, and on demand; not on every docs or UI change.
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "data/**"
+      - "evals/**"
+      - "redteam/**"
+      - "requirements.txt"
+      - ".github/workflows/quality-gate.yml"
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "data/**"
+      - "evals/**"
+      - "redteam/**"
+      - "requirements.txt"
+      - ".github/workflows/quality-gate.yml"
+  schedule:
+    - cron: "30 1 * * *" # nightly: catches drift even when nobody pushes
+  workflow_dispatch:
+
+concurrency:
+  group: quality-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  OLLAMA_VERSION: v0.40.14
+  OLLAMA_MODELS: /home/runner/.ollama/models
+  CHAT_MODEL: llama3.2:3b
+  EMBED_MODEL: nomic-embed-text
+  REQUEST_TIMEOUT: "300" # CPU runners are slower than a laptop GPU
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: pip install -r requirements.txt
+
+      - name: Cache Ollama
+        id: ollama-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/ollama
+          key: ollama-${{ env.OLLAMA_VERSION }}-cpu
+      - name: Install Ollama (CPU files only)
+        if: steps.ollama-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o /tmp/ollama.tar.zst \
+            "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
+          mkdir -p ~/ollama
+          # GPU libraries are most of the 1.4 GB and useless on a CPU runner.
+          tar --zstd -xf /tmp/ollama.tar.zst -C ~/ollama \
+            --wildcards --exclude='*cuda*' --exclude='*rocm*' --exclude='*vulkan*'
+          rm /tmp/ollama.tar.zst
+      - name: Cache models
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OLLAMA_MODELS }}
+          key: ollama-models-${{ env.CHAT_MODEL }}-${{ env.EMBED_MODEL }}
+      - name: Start Ollama and pull models
+        run: |
+          OLLAMA_BIN=$(find ~/ollama -type f -name ollama -perm -u+x | head -1)
+          echo "OLLAMA_BIN=$OLLAMA_BIN" >> "$GITHUB_ENV"
+          "$OLLAMA_BIN" --version
+          nohup "$OLLAMA_BIN" serve > ~/ollama.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:11434 > /dev/null && break; sleep 1; done
+          "$OLLAMA_BIN" pull "$CHAT_MODEL"
+          "$OLLAMA_BIN" pull "$EMBED_MODEL"
+
+      - name: Smoke eval (golden questions)
+        run: python -m evals.run --smoke --guardrails on --out evals/results/ci
+      - name: Red team (guardrails on)
+        run: python -m redteam.run --guardrails on --out redteam/results/ci
+      - name: Quality gate
+        run: |
+          python -m evals.gate \
+            --eval evals/results/ci/summary.json \
+            --redteam redteam/results/ci/summary.json
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-gate-reports
+          path: |
+            evals/results/ci/
+            redteam/results/ci/
+            /home/runner/ollama.log
+          retention-days: 14
