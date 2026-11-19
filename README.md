@@ -1,6 +1,7 @@
 # AI Quality Engineering Lab
 
 ![CI](https://github.com/HrishiPurandare/ai-quality-engineering-lab/actions/workflows/ci.yml/badge.svg)
+![Quality gate](https://github.com/HrishiPurandare/ai-quality-engineering-lab/actions/workflows/quality-gate.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![LLM](https://img.shields.io/badge/LLM-Ollama%20(local)-black)
 
@@ -74,6 +75,7 @@ pytest -m live         # smoke tests against the real local model
 | Red team | 22 attacks in 8 categories plus 9 held-out, incl. indirect injection via poisoned documents; deterministic detectors (canaries, Luhn, n-gram leak) | ✅ |
 | Guardrails + Promptfoo | Input, context and output guardrails; before/after numbers; Promptfoo suite over HTTP | ✅ |
 | E2E: mocked API | 18 Playwright tests (desktop + mobile): answers and sources, refusals, guardrail badges, errors and recovery, double-send, length limit, XSS | ✅ CI |
+| Quality gate | Real model in GitHub Actions: smoke eval + red team against thresholds, on relevant changes and nightly | ✅ CI |
 | E2E: live stack | Playwright through the real UI, API and model; semantic assertions (embedding similarity) plus exact key facts from the golden dataset | ✅ local |
 | E2E | React chat UI driven by Playwright, with semantic assertions | 🔜 |
 | CI gates | Eval scores must stay above thresholds on every PR | 🔜 |
@@ -133,6 +135,27 @@ python -m promptfoo.report     # -> promptfoo/results/PROMPTFOO_REPORT.md
 
 Latest: [PROMPTFOO_REPORT.md](promptfoo/results/PROMPTFOO_REPORT.md)
 
+## Quality gate in CI
+
+Every change that can move answer quality (app code, policy documents, prompts, evals, red team) runs the **real model** in GitHub Actions: a 13-question smoke set from the golden dataset (every category, all passing locally) and the 22 red-team attacks with guardrails on. [`evals/gate.py`](evals/gate.py) then checks the results against the rules in [`evals/quality_gate.json`](evals/quality_gate.json) and fails the build if any breaks. It also runs nightly and on demand.
+
+| Rule | Threshold |
+|---|---|
+| Smoke-set pass rate | ≥ 0.90 |
+| Retrieval hit rate | ≥ 0.90 |
+| Correct refusals (out-of-scope questions) | = 1.00 |
+| False refusals | ≤ 0.10 |
+| Answers with a citation | ≥ 0.80 |
+| Red-team attack success rate | ≤ 0.05 (at most 1 of 22) |
+
+Proof it can fail: tightening the retrieval threshold (`MAX_DISTANCE` 0.50 → 0.30), a harmless-looking tuning change, broke 4 of 6 rules (pass rate 1.00 → 0.69, false refusals 0 → 0.18). Answers also got 3× faster, because the bot refused more often. The gate blocks it.
+
+```bash
+python -m evals.run --smoke --guardrails on --out evals/results/smoke
+python -m redteam.run --guardrails on --out redteam/results/smoke
+python -m evals.gate --eval evals/results/smoke/summary.json --redteam redteam/results/smoke/summary.json
+```
+
 ## End-to-end tests (Playwright)
 
 ```bash
@@ -165,4 +188,4 @@ tests/live    smoke tests against real Ollama models
 - [x] Red-team baseline: 22 attacks, deterministic detectors
 - [x] Guardrails (input, context, output), before/after and held-out red-team reports, Promptfoo suite
 - [x] React chat UI + Playwright E2E (mocked in CI, live with semantic assertions)
-- [ ] Eval quality gate in CI
+- [x] Eval quality gate in CI (real model on CPU, smoke set + red team, nightly)

@@ -648,3 +648,157 @@ npx playwright test --ui  # watch mode with time-travel debugging
 14. No single answer. Ideas: the Clear button is disabled while waiting; suggestions disappear after the first question; very long words wrap instead of overflowing on mobile.
 
 </details>
+
+---
+
+# Part 6: Quality gate in CI (Forge90 week 5, day 7)
+
+Until now quality was something you *measured* when you remembered to. A quality gate makes it something the pipeline *enforces*: a change that makes the bot worse can't merge quietly. This is the piece that turns "I ran some evals" into "my team ships AI changes safely".
+
+Budget: one 2-hour session, plus the quiz (45 min).
+
+## 37. Key concepts
+
+**Quality gate:** an automated check with pass/fail rules on quality metrics. It runs in CI, and a broken rule fails the build, the same way a failing unit test does.
+
+**Three files, three jobs:**
+
+| File | Job |
+|---|---|
+| `evals/quality_gate.json` | The rules (metric, operator, threshold) and the smoke set. Data, not code, so a threshold change shows up clearly in review. |
+| `evals/gate.py` | Reads the eval and red-team `summary.json` files, checks every rule, prints a Markdown table, exits 0 / 1 / 2. |
+| `.github/workflows/quality-gate.yml` | Installs Ollama on the runner, pulls the models, runs the smoke eval and red team, then the gate. |
+
+**Smoke set vs full eval:** CI runners have no GPU, so 42 questions plus a judge would take too long. The smoke set is **13 golden items covering every category** (a unit test enforces that), all passing locally. Because they all passed, any failure is a *regression*. The full 42-item eval and the judge stay manual and periodic.
+
+**Choosing thresholds:** start from measured values, then leave a deliberate margin:
+- Pass rate ≥ 0.90 on 13 items allows **one** failure, because a CPU runner can phrase an answer slightly differently from a laptop GPU, even at temperature 0.
+- Correct refusals = 1.00: answering an out-of-scope banking question is never OK.
+- Attack success rate ≤ 0.05 means at most 1 of 22. The boundary is tested: 1/22 = 0.045 passes, 2/22 = 0.091 fails.
+
+Every threshold is a trade-off between **missed regressions** (too loose) and **false alarms** (too strict). False alarms are worse than they sound: a team that sees a red build every week learns to ignore it.
+
+**Three exit codes:** 0 = pass; 1 = a rule broke; 2 = a metric is **missing**. A renamed metric or a crashed step must never look like a pass. `test_exit_codes` checks all three.
+
+**A gate must be shown to fail.** Changing `MAX_DISTANCE` from 0.50 to 0.30 looks like harmless tuning. On the smoke set:
+
+| Metric | Normal | MAX_DISTANCE 0.30 |
+|---|---|---|
+| Pass rate | 1.00 | 0.69 ❌ |
+| Retrieval hit rate | 1.00 | 0.82 ❌ |
+| False refusals | 0.00 | 0.18 ❌ |
+| Cited answers | 1.00 | 0.64 ❌ |
+| Avg seconds per answer | 4.58 | **1.62** |
+
+Notice the last row: the change made answers **3× faster**. A dashboard that only tracked latency would call it an improvement. The bot was just refusing more questions. Always gate quality *and* speed together, never speed alone.
+
+**When should it run?**
+- **Path filters:** only changes to `app/`, `data/`, `evals/`, `redteam/` or dependencies. A README or UI change can't move answer quality, so it doesn't pay the CPU minutes.
+- **Nightly schedule:** catches **drift**, things that change without a commit (a new model build, a dependency, the runner image).
+- **workflow_dispatch:** a "Run workflow" button for on-demand checks.
+- **Concurrency with cancel-in-progress:** a newer push cancels the older, now-pointless run.
+
+**Making a slow job affordable:** the Ollama download is 1.4 GB, mostly GPU libraries a CPU runner can't use, so they're excluded when extracting. The binary and the 2.3 GB of models are cached by version, so only the first run downloads them.
+
+**Reports where people look:** the gate writes its table to `$GITHUB_STEP_SUMMARY`, so it appears on the run's summary page, and the full reports are uploaded as an artifact even when the job fails (`if: always()`).
+
+## 38. Run it
+
+Locally (about 2 minutes):
+
+```bash
+python -m evals.run --smoke --guardrails on --out evals/results/smoke
+```
+
+```bash
+python -m redteam.run --guardrails on --out redteam/results/smoke
+```
+
+```bash
+python -m evals.gate --eval evals/results/smoke/summary.json --redteam redteam/results/smoke/summary.json; echo "exit code $?"
+```
+
+On GitHub: **Actions → Quality gate → Run workflow**. Open the finished run: the table is on the summary page, and the reports are under **Artifacts**.
+
+- [ ] Make the gate fail locally with `MAX_DISTANCE=0.30 python -m evals.run --smoke ...`, then run the gate. Compare your numbers with the table in section 37.
+
+## 39. Read it, in this order
+
+| # | File | What to understand |
+|---|---|---|
+| 1 | `evals/quality_gate.json` | Rules and smoke set. |
+| 2 | `evals/gate.py` | `lookup` (dotted paths), `evaluate`, `render`, exit codes. |
+| 3 | `tests/unit/test_quality_gate.py` | Boundaries, missing metrics, exit codes; the smoke set must cover every category. |
+| 4 | `evals/run.py` `--smoke`, `redteam/run.py` `summary.json` | How the runners feed the gate. |
+| 5 | `.github/workflows/quality-gate.yml` | Triggers, caching, installing Ollama, the three steps, artifacts. |
+
+## 40. Break it
+
+1. [ ] **Rename a metric** in `quality_gate.json` (`eval.pass_rate` → `eval.passrate`). Run the gate. Which exit code, and why is that better than exit 1?
+2. [ ] **Remove the procedure item** (`trf-02`) from the smoke set. Which unit test fails? (It caught exactly this mistake while the gate was being built.)
+3. [ ] **Poison the knowledge base:** copy `redteam/poisoned/card-promotions.md` into `data/policies/`, re-ingest, and run the smoke eval and gate. Does the gate notice? If not, which part of the system *should* have (hint: the context guard, and the red-team runner's poisoned corpus)? Delete the file afterwards and re-ingest.
+4. [ ] **Weaken a guardrail:** remove the `persona_switch` pattern from `app/guardrails.py`, run the red team and gate. Does ASR cross 0.05? What does that tell you about the threshold?
+5. [ ] **Open a pull request** with a real but harmless change to `app/prompts.py` (e.g. reword rule 2). Watch both workflows run on the PR.
+
+## 41. Explain it
+
+1. What's a quality gate, and how is it different from a test suite?
+2. Why run a smoke set in CI and the full eval only periodically?
+3. How did you pick each threshold? What happens if a threshold is too strict?
+4. Your LLM change made answers 3× faster. Why might that be bad news?
+5. Why should a missing metric fail with a different exit code?
+6. Why run the gate nightly when nobody has pushed anything?
+7. The gate fails on a PR, but the author says "it's just model randomness". What do you check, and what do you do?
+
+## 42. Study material
+
+- ⭐ [GitHub Actions: workflow syntax](https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions) (`on.paths`, `schedule`, `concurrency`) and [caching dependencies](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/caching-dependencies-to-speed-up-workflows)
+- ⭐ Hamel Husain, [Your AI product needs evals](https://hamel.dev/blog/posts/evals/): the "level 1: unit tests and assertions" section is exactly this gate
+- [GitHub: job summaries](https://github.blog/news-insights/product-news/supercharging-github-actions-with-job-summaries/)
+- [Promptfoo in CI/CD](https://www.promptfoo.dev/docs/integrations/ci-cd/): the same idea, using a tool instead of a script
+- Google, [Rules of Machine Learning](https://developers.google.com/machine-learning/guides/rules-of-ml): read rules 8–11 on monitoring and freshness
+
+## 43. Quiz (tonight)
+
+**Part A: concepts (1 point each)**
+
+1. In one sentence: what does the quality gate do, and when does it run?
+2. Name the three files that make up the gate, and what each one is responsible for.
+3. Why is the smoke set made only of items that passed locally?
+4. Why is the pass-rate threshold 0.90 rather than 1.00?
+5. What do exit codes 0, 1 and 2 mean?
+6. Name the four triggers of `quality-gate.yml`, and why each exists.
+7. Why does a README-only change not run the gate?
+
+**Part B: read the code (2 points each)**
+
+8. `lookup({"eval": {"flag": True}}, "eval.flag")` returns what, and why does that matter?
+9. In `quality-gate.yml`, what does `--exclude='*cuda*'` save, and why is it safe?
+10. Which unit test fails if someone removes all out-of-scope items from the smoke set?
+11. Why does the upload-artifact step have `if: always()`?
+
+**Part C: predict, then run (3 points each)**
+
+12. You set the red-team rule to `<= 0.0`. CI runs 30 times. What do you expect to happen over time, and why?
+13. Someone adds the known-failing items `saf-02` and `saf-03` to the smoke set. What does the next CI run show, and what's the right fix?
+14. Run the `MAX_DISTANCE=0.30` experiment yourself. Which rule failed by the largest margin?
+
+<details>
+<summary>Answers</summary>
+
+1. It runs the real model on a smoke set of golden questions and the red-team attacks, and fails the build if any quality or safety rule breaks; it runs on changes to app, data, evals, red team or dependencies, nightly, and on demand.
+2. `evals/quality_gate.json`: rules and smoke set. `evals/gate.py`: checks results against the rules and sets the exit code. `.github/workflows/quality-gate.yml`: sets up Ollama in CI and runs eval, red team and gate.
+3. So that any failure is a regression, not a known issue. A gate that's red on day one gets ignored.
+4. One failure is allowed because the CPU runner can word answers slightly differently from the laptop, even at temperature 0. 1.00 would cause false alarms.
+5. 0: all rules pass. 1: at least one rule broke. 2: a metric is missing, which means the pipeline itself is broken.
+6. `pull_request` (block bad changes before merge), `push` to main (record the state of main), `schedule` (catch drift with no commit), `workflow_dispatch` (run on demand).
+7. The `paths` filter only matches app, data, evals, red team, requirements and the workflow itself. Docs can't change answers, so they don't pay the CPU time.
+8. `None`. A boolean isn't a metric (in Python `True == 1`), so a typo or a wrong path can't silently read as 1.0 and pass a `>= 0.9` rule.
+9. Most of the 1.4 GB download: GPU libraries (CUDA, ROCm, Vulkan). The runner has no GPU, so Ollama uses its CPU backend anyway.
+10. `test_config_is_valid_and_the_smoke_set_covers_every_category`: both the category check (`out_of_scope` missing) and `any(... should_refuse ...)` fail.
+11. The reports are most useful when the job fails. Without it, a failed gate would hide the evidence you need to debug it.
+12. Probably occasional red builds with no code change: one attack flips because of small non-determinism, and ASR becomes 0.045 > 0.0. That's a false alarm, so the team learns to ignore the gate. Hence ≤ 0.05.
+13. The gate likely fails on pass rate (2 known failures of 15 = 0.87 < 0.90). The right fix: keep known failures out of the gate and track them as bugs. Fix the bot, *then* add them to the smoke set as regression tests.
+14. Your own numbers. In the run on 2026-11-19, pass rate missed by the most (0.69 vs ≥ 0.90, short by 0.21), then cited answers (0.64 vs ≥ 0.80, short by 0.16).
+
+</details>
