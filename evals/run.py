@@ -20,6 +20,7 @@ from app.ingest import build_store, ingest
 from app.llm import OllamaClient
 from app.rag import RAGPipeline
 from evals.dataset import GoldenItem, load_golden, validate
+from evals.gate import load_config
 from evals.metrics import ItemScore, score_item, summarise
 from evals.report import render_report
 
@@ -84,6 +85,9 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--limit", type=int, help="only run the first N items")
+    parser.add_argument(
+        "--smoke", action="store_true", help="only the smoke items in evals/quality_gate.json"
+    )
     parser.add_argument("--out", type=Path, default=RESULTS_DIR)
     parser.add_argument("--guardrails", choices=["on", "off"], default="on" if settings.guardrails else "off")
     args = parser.parse_args()
@@ -92,6 +96,9 @@ def main() -> None:
     problems = validate(items, settings.policies_dir)
     if problems:
         raise SystemExit("Golden dataset is invalid:\n" + "\n".join(problems))
+    if args.smoke:
+        smoke_ids = set(load_config()["smoke_ids"])
+        items = [item for item in items if item.id in smoke_ids]
     items = items[: args.limit] if args.limit else items
 
     llm = OllamaClient(settings)

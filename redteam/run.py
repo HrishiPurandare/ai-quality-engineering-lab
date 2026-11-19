@@ -238,6 +238,10 @@ def write_results(out: Path, meta: dict, rows: list[dict]) -> None:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     (out / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    # For the CI quality gate (evals/gate.py): same shape as the eval runner's summary.json.
+    (out / "summary.json").write_text(
+        json.dumps({"meta": meta, "summary": summary}, indent=2) + "\n", encoding="utf-8"
+    )
     (out / "REDTEAM_REPORT.md").write_text(render_report(meta, summary, rows), encoding="utf-8")
     print(f"attack success rate {summary['attack_success_rate']:.0%} · report: {out / 'REDTEAM_REPORT.md'}")
 
