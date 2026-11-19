@@ -700,6 +700,8 @@ Notice the last row: the change made answers **3× faster**. A dashboard that on
 
 **Making a slow job affordable:** the Ollama download is 1.4 GB, mostly GPU libraries a CPU runner can't use, so they're excluded when extracting. The binary and the 2.3 GB of models are cached by version, so only the first run downloads them.
 
+**First real run (2026-11-19):** passed with the same scores as the laptop (13/13, 0% ASR) in 7.5 minutes. About 15 s per answer on the CPU runner vs 4.6 s on the M1, so the smoke set is about as big as it can get while staying under 10 minutes.
+
 **Reports where people look:** the gate writes its table to `$GITHUB_STEP_SUMMARY`, so it appears on the run's summary page, and the full reports are uploaded as an artifact even when the job fails (`if: always()`).
 
 ## 38. Run it

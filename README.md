@@ -148,6 +148,8 @@ Every change that can move answer quality (app code, policy documents, prompts, 
 | Answers with a citation | ≥ 0.80 |
 | Red-team attack success rate | ≤ 0.05 (at most 1 of 22) |
 
+First run on GitHub (2026-11-19, CPU runner): **passed**, 13/13 smoke items and 0/22 attacks, in 7.5 minutes end to end (smoke eval 3m 19s, red team 2m 43s, about 15 s per answer vs 4.6 s on an M1). Installing Ollama and pulling both models took under a minute; later runs use the cache.
+
 Proof it can fail: tightening the retrieval threshold (`MAX_DISTANCE` 0.50 → 0.30), a harmless-looking tuning change, broke 4 of 6 rules (pass rate 1.00 → 0.69, false refusals 0 → 0.18). Answers also got 3× faster, because the bot refused more often. The gate blocks it.
 
 ```bash
