@@ -964,3 +964,125 @@ Then open `evals/history/TREND.md`. Run the three commands a second time without
 14. No "vs previous run" warning (0.94 → 0.91 is a drop of 0.03). The slow-decay warning fires: the average of the last 3 runs is 0.97, and 0.91 is 0.06 below it. No gate failure either (0.91 ≥ 0.90).
 
 </details>
+
+---
+
+# Part 8: Explain the whole project (Forge90 week 5, day 9)
+
+Parts 1–7 taught each piece. This part is about **telling the story**: in a 2-minute intro, at a whiteboard, and in answers to the questions interviewers actually ask. Practise out loud; reading isn't enough.
+
+Budget: two 2-hour sessions (pitch and whiteboard in the first, stories and the final quiz in the second).
+
+## 51. The 2-minute pitch
+
+Learn the structure, not the words: **problem → what I built → how I tested it → what I found → what I'd do next.**
+
+> "Testing an AI chatbot is different from testing normal software: the same question can get different answers, and 'correct' is fuzzy. I wanted to show how I'd test one properly, so I built a small banking assistant, Ask Ledgerly. It answers from the bank's policy documents with citations (that's RAG), runs fully locally on Ollama, and refuses when no policy is relevant.
+>
+> Around it I built the quality toolkit in layers. Unit tests with a fake model, so the logic is tested deterministically. A 42-question golden dataset with retrieval and answer metrics: 90% pass. A red team of 22 attacks including indirect injection through a poisoned document, plus guardrails that took attack success from 9% to 0%. And, honestly, 22% on attacks I wrote *after* the guardrails. Playwright tests for the React UI, mocked in CI and live with semantic assertions. And a CI quality gate that runs the real model on every relevant change and every night.
+>
+> The most interesting findings were the surprises: embeddings can't tell AED 50 from AED 500, a 3B judge model isn't trustworthy, and temperature 0 still isn't deterministic. The gate passed a run that the trend report showed was flaky. Next I'd add a stronger judge and multi-turn tests."
+
+- [ ] Record yourself once on your phone. Is it under 2:15? Did you say at least three numbers?
+
+## 52. The whiteboard walk-through (5 minutes)
+
+Draw it in this order, talking as you go. Each step adds one box and one sentence about **why**.
+
+1. **The app:** UI → API → retrieve from vector store → model → answer with citations. *Why RAG:* the model must answer from the bank's documents, not its memory.
+2. **The refusal gate:** nothing close enough → refuse without calling the model. *Why:* the cheapest hallucination is the one that never gets generated.
+3. **Guardrails:** input, context and output boxes around the model. *Why outside the model:* deterministic, testable, and they report which rule fired.
+4. **The test layers:** unit (fake LLM) → golden-set evals → red team → E2E → CI gate → trend. *Why layers:* each catches what the others can't, at a different cost.
+5. **Where each runs:** every push (unit, mocked E2E), relevant changes and nightly (real-model gate), locally (full eval, judge, held-out attacks, live E2E). *Why:* cost and speed. The CPU runner takes ~15 s per answer.
+
+- [ ] Draw it on paper from memory, then compare with the two diagrams in the README.
+
+## 53. Three stories (STAR)
+
+Interviewers remember stories, not feature lists. Each of these has a **surprise** and a **number**.
+
+**1. "The test that passed the wrong answer"**
+- Situation: live E2E tests checked answers by meaning (embedding similarity ≥ 0.70).
+- Task: make sure the threshold actually separates right from wrong answers.
+- Action: calibrated it with deliberately wrong answers, not just right ones.
+- Result: "AED 500" scored **0.97** against the expected "AED 50", higher than the correct answer (0.77). Added exact key facts from the golden set next to the semantic check, and pinned the finding as a "known limit" test.
+
+**2. "Who judges the judge?"**
+- Situation: LLM-as-judge metrics from DeepEval with a local judge.
+- Task: decide whether judge scores could gate releases.
+- Action: ran two judge models on items where retrieval was verified correct.
+- Result: contextual recall **0.04 vs 0.78** for the same items. Decided deterministic metrics gate; judge scores are advisory with their reasons shown.
+
+**3. "Green build, real problem"**
+- Situation: the CI quality gate ran nightly with no code changes.
+- Task: understand why a passing run had a lower score.
+- Action: built a trend history that compares each run with the last comparable one and lists what changed (code fingerprint, config, machine, model version).
+- Result: the 2026-11-20 nightly scored **12/13** with nothing changed: the model named its source in words instead of `[1]`. Labelled flaky, not a regression, so nobody reverts a good commit.
+
+- [ ] Tell each story out loud in under 90 seconds.
+
+## 54. Questions you'll be asked
+
+Outline answers; fill in the details from the part in brackets.
+
+| Question | Your answer in one line | Part |
+|---|---|---|
+| How do you test something non-deterministic? | Test the deterministic parts with a fake model; check model output by properties (facts, citations, refusals), not exact text; measure flakiness instead of ignoring it. | 1, 5, 7 |
+| How do you know your RAG retrieves the right thing? | Measure retrieval separately: hit rate and MRR against expected sources in the golden set. | 2 |
+| What's a golden dataset and how did you build yours? | 42 questions in 6 categories with expected sources and required facts, validated against the source documents by a unit test. | 2 |
+| Would you trust an LLM judge? | Only after calibrating it; mine disagreed with itself across models, so it's advisory. | 2 |
+| How do you test for prompt injection? | Direct, indirect (poisoned documents) and held-out attacks, scored by deterministic detectors that are themselves tested. | 3 |
+| Your guardrails score 0%. Done? | No: that's on the attacks they were tuned on. Held-out was 22%. | 4 |
+| Why both mocked and live E2E? | Mocked tests the UI exactly and fast; live tests the whole stack, but needs fuzzy assertions. | 5 |
+| How do you stop a bad prompt change reaching production? | A CI gate on real-model metrics with thresholds chosen from measurements, shown to fail. | 6 |
+| A test failed overnight with no commits. What now? | Compare with the last comparable run and list what changed; nothing changed means flaky. | 7 |
+| What would you do with more time or budget? | A stronger judge, judge-vs-human agreement, multi-turn tests, closing the held-out holes. | README |
+
+## 55. Final quiz (covers Parts 1–7)
+
+**Part A: one line each (1 point)**
+
+1. What does RAG stand for, and what problem does it solve?
+2. What does `MAX_DISTANCE` control, and what's its value?
+3. Name the three guardrail layers.
+4. What's an attack success rate?
+5. What's a held-out attack set for?
+6. Name the three Playwright projects.
+7. What are the gate's three exit codes?
+8. What makes a run "flaky" in the trend report?
+
+**Part B: explain (2 points)**
+
+9. Why does the bot refuse *before* calling the model when nothing is relevant?
+10. Why are the red-team detectors unit-tested with both safe and unsafe answers?
+11. Why does the live E2E suite check exact facts as well as semantic similarity?
+12. Why is the CI smoke set 13 questions and not 42?
+13. Why does the trend report hash input files instead of comparing commit hashes?
+
+**Part C: scenarios (3 points)**
+
+14. A colleague raises `TOP_K` from 4 to 8 "to give the model more context". Which metrics could get better, which could get worse, and how would you find out?
+15. A new policy document is added. Which parts of the system could break, and which checks would catch each?
+16. The nightly gate fails on attack success rate (2 of 22), with nothing changed. Walk through what you do.
+
+<details>
+<summary>Answers</summary>
+
+1. Retrieval-augmented generation: fetch relevant documents and make the model answer from them, so answers are grounded and citable instead of coming from the model's memory.
+2. The largest cosine distance at which a retrieved chunk still counts as relevant; 0.50. If no chunk is within it, the bot refuses.
+3. Input guard, context guard, output guard.
+4. The share of attacks that got through (failed at least one detector check). Lower is better.
+5. To measure honestly whether guardrails generalise: attacks written *after* the guardrails, so the guardrails weren't tuned on them.
+6. `mocked` (desktop), `mobile` (Pixel 7, `@responsive` tests), `live` (real stack, 1 worker).
+7. 0 = all rules pass, 1 = a rule broke, 2 = a metric is missing.
+8. Question or attack verdicts changed between two comparable runs while nothing that can change an answer changed (input files, config, machine, Ollama version, model digests).
+9. It's cheaper and safer: a model that's never called can't hallucinate. And the refusal is deterministic, so it's testable.
+10. A detector that never fires looks like a perfect defence. Testing both directions proves it catches unsafe answers and doesn't flag safe ones.
+11. Embeddings barely see numbers: "AED 500" scored 0.97 against "AED 50". Exact facts catch wrong amounts; similarity catches wrong meaning.
+12. A CPU runner takes ~15 s per answer; 13 questions covering every category plus 22 attacks finish in about 7.5 minutes. The full 42 run locally.
+13. A docs-only commit can't change an answer. Hashing the files that *can* (app, data, golden set, gate config, red team, requirements) means docs commits don't count as changes, and the same hash can be computed from a past commit.
+14. Could improve: source recall, multi-hop answers (more of the needed context). Could worsen: precision (more irrelevant chunks), answer quality and citations, latency, and injection exposure (more retrieved text, including poisoned text). Find out by running the full eval, the red team and the trend comparison before and after, not by guessing.
+15. Retrieval (the new document could outrank the right one for existing questions: watch hit rate and "top retrieved document changed"), answers (new contradictions), the refusal gate (out-of-scope questions might now find a "relevant" chunk: watch correct refusals), and injection (if the document contains instructions: the context guard and the red team's poisoned corpus). The CI gate runs because `data/` changed.
+16. Open the trend section: confirm nothing changed and see which attacks flipped. Read the two answers in the red-team report: real leaks, or a detector false positive? If real, it's a guardrail gap even if flaky (an attacker can just retry), so fix the guardrail and add the attack as a test. If it's a detector false positive, fix the detector and `--rescore`. Either way, don't just re-run until green.
+
+</details>
