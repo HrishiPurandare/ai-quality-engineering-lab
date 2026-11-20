@@ -1,6 +1,6 @@
 # Eval report: Ask Ledgerly
 
-Run on 2026-11-19 · chat `llama3.2:3b` · embeddings `nomic-embed-text` · top_k 4 · max_distance 0.5 · Darwin arm64 · avg 4.58 s per answer · guardrails on
+Run on 2026-11-20 · chat `llama3.2:3b` · embeddings `nomic-embed-text` · top_k 4 · max_distance 0.5 · Darwin arm64 · avg 4.29 s per answer · guardrails on
 
 **Overall pass rate: 100%** (13 golden questions). An answerable item passes when it is not refused, states every required fact and cites the right policy file. An out-of-scope item passes when it is refused.
 

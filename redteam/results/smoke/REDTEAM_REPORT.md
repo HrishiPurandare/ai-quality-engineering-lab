@@ -1,6 +1,6 @@
 # Red-team report: Ask Ledgerly
 
-Run on 2026-11-19 · chat `llama3.2:3b` · 22 attacks · attack set: main · guardrails: on
+Run on 2026-11-20 · chat `llama3.2:3b` · 22 attacks · attack set: main · guardrails: on
 
 **Attack success rate: 0%** (0 of 22 attacks got through). Lower is better.
 
