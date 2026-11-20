@@ -11,6 +11,44 @@ How do you **test** an AI chatbot? This lab answers that hands-on. It contains a
 
 Everything runs **locally and for free** on [Ollama](https://ollama.com). No API keys, and no customer data leaves the machine. Ledgerly Bank is fictional; its policy documents are invented test data.
 
+## At a glance
+
+| Question | Measured answer |
+|---|---|
+| Does it answer correctly? | **90%** of 42 golden questions (38/42); **13/13** on the CI smoke set |
+| Does it refuse what it should? | **100%** of out-of-scope questions refused; 5% false refusals |
+| Can it be attacked? | 22 attacks: **9% → 0%** success with guardrails. 9 held-out attacks written afterwards: **33% → 22%** (the honest number) |
+| Is the UI right? | 18 Playwright tests on a mocked API in CI (desktop + mobile), 8 on the live stack with semantic assertions |
+| Does CI stop regressions? | The real model runs in GitHub Actions against 6 rules in 7.5 min, and was shown failing on a harmful tuning change |
+| Does it notice drift? | The trend report caught a flaky answer in a nightly run (12/13, nothing changed) that the gate let through |
+
+**Five things this lab found** (each one is written up, with the data, in [LEARN.md](LEARN.md)):
+1. **Embeddings can't see numbers.** "AED 500" scored 0.97 similarity against the expected "AED 50", higher than the correct answer. Semantic assertions need exact facts alongside them.
+2. **A 3B judge isn't trustworthy.** Two local judges scored the same correct retrieval 0.04 and 0.78. Deterministic metrics gate quality; judge scores are advisory.
+3. **Guardrails look perfect on the attacks they were tuned on.** 0% on those, 22% on attacks written later.
+4. **Faster can mean worse.** A tighter retrieval threshold made answers 3× faster and broke 4 of 6 quality rules: the bot was refusing more.
+5. **Temperature 0 isn't deterministic.** Same commit, same retrieved document, different answer overnight. The trend report tells flaky runs from regressions.
+
+## How quality is checked
+
+```mermaid
+flowchart LR
+    C[Push or pull request] --> U[Unit tests: fake LLM, ~3 s]
+    C --> W[Web build + Playwright on a mocked API]
+    C -->|app, data, evals or red team changed| G[Quality gate: real model on a CPU runner]
+    N[Nightly schedule] --> G
+    G --> S[Smoke eval: 13 golden questions]
+    G --> RT[Red team: 22 attacks]
+    S --> R{6 rules}
+    RT --> R
+    R -->|any rule broken| F[Build fails]
+    S --> T[Trend: drift, flaky vs regression]
+    RT --> T
+    L[Locally, periodically] --> FE[Full 42-question eval, LLM judge,<br/>held-out red team, Promptfoo, live E2E]
+```
+
+Fast and deterministic checks run on every change; checks that need the real model run where they're affordable. Anything slow, noisy or needing a bigger machine runs locally, with its report committed.
+
 ## Architecture
 
 ```mermaid
@@ -77,8 +115,7 @@ pytest -m live         # smoke tests against the real local model
 | E2E: mocked API | 18 Playwright tests (desktop + mobile): answers and sources, refusals, guardrail badges, errors and recovery, double-send, length limit, XSS | ✅ CI |
 | Quality gate | Real model in GitHub Actions: smoke eval + red team against thresholds, on relevant changes and nightly | ✅ CI |
 | E2E: live stack | Playwright through the real UI, API and model; semantic assertions (embedding similarity) plus exact key facts from the golden dataset | ✅ local |
-| E2E | React chat UI driven by Playwright, with semantic assertions | 🔜 |
-| CI gates | Eval scores must stay above thresholds on every PR | 🔜 |
+| Trend and drift | Every gate run compared with the last comparable one: metric drops, pass/fail flips, and what changed (flaky vs regression) | ✅ CI |
 
 ## Evals
 
@@ -201,6 +238,15 @@ tests/unit    fast deterministic tests with a fake LLM
 tests/live    smoke tests against real Ollama models
 ```
 
+## Limitations
+
+Honest boundaries of this lab, each measured rather than guessed:
+- **Small models.** Everything runs on an 8 GB laptop, so the chat model and judge are 3B. The judge is advisory only; a 7B+ or API judge would be the next step.
+- **Two held-out attacks still get through** (22%): a "translate, then append" injection and a second poisoned document. Pattern-based guardrails don't generalise fully.
+- **One known flaky question** (`saf-01`): the model sometimes names its source in words instead of `[1]`.
+- **The CI gate uses 13 of the 42 questions**, because a CPU runner takes about 15 s per answer. The full eval runs locally.
+- **Not a production system:** no authentication, rate limiting, multi-turn memory or languages other than English. The bank and its policies are fictional.
+
 ## Roadmap
 - [x] RAG assistant with citations and refusal threshold
 - [x] Unit tests + CI
@@ -209,4 +255,12 @@ tests/live    smoke tests against real Ollama models
 - [x] Guardrails (input, context, output), before/after and held-out red-team reports, Promptfoo suite
 - [x] React chat UI + Playwright E2E (mocked in CI, live with semantic assertions)
 - [x] Eval quality gate in CI (real model on CPU, smoke set + red team, nightly)
-- [x] Trend report and drift detection (flaky vs regression, model-version tracking)
+- [x] Trend report and drift detection (flaky vs regression, model-version tracking) → **v1.0.0**, see [CHANGELOG](CHANGELOG.md)
+- [ ] Close the two held-out attack holes; make the citation check robust to `saf-01`'s wording
+- [ ] Stronger judge model (7B+ or an API model) and judge-vs-human agreement on a labelled sample
+- [ ] Multi-turn conversations (memory makes injection and leakage harder to test)
+- [ ] Point the assistant at the Ledgerly Bank app's real API (project P-01)
+
+## License
+
+[MIT](LICENSE). Ledgerly Bank, its policies and all data here are fictional.
