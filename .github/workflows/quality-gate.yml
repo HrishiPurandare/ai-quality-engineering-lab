@@ -40,6 +40,7 @@ env:
   CHAT_MODEL: llama3.2:3b
   EMBED_MODEL: nomic-embed-text
   REQUEST_TIMEOUT: "300" # CPU runners are slower than a laptop GPU
+  HISTORY: .gate-history/history.jsonl # in the workspace: hashFiles() cannot see outside it
 
 jobs:
   gate:
@@ -89,11 +90,37 @@ jobs:
         run: python -m evals.run --smoke --guardrails on --out evals/results/ci
       - name: Red team (guardrails on)
         run: python -m redteam.run --guardrails on --out redteam/results/ci
+
+      # History of earlier CI runs lives in the Actions cache: a new key every run (caches are
+      # immutable), restored from the newest one by prefix. First run: start from the committed history.
+      - name: Restore trend history
+        uses: actions/cache/restore@v4
+        with:
+          path: .gate-history
+          key: gate-history-${{ github.run_id }}
+          restore-keys: gate-history-
+      - name: Trend and drift (warnings only)
+        run: |
+          mkdir -p "$(dirname "$HISTORY")"
+          [ -f "$HISTORY" ] || cp evals/history/history.jsonl "$HISTORY"
+          python -m evals.trend record \
+            --eval evals/results/ci --redteam redteam/results/ci \
+            --source "ci-${{ github.event_name }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --history "$HISTORY" --trend evals/results/ci/TREND.md
       - name: Quality gate
         run: |
           python -m evals.gate \
             --eval evals/results/ci/summary.json \
             --redteam redteam/results/ci/summary.json
+
+      # Save even when the gate fails: failing runs are the ones the history most needs.
+      - name: Save trend history
+        if: always() && hashFiles('.gate-history/history.jsonl') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .gate-history
+          key: gate-history-${{ github.run_id }}
 
       - name: Upload reports
         if: always()
@@ -104,4 +131,5 @@ jobs:
             evals/results/ci/
             redteam/results/ci/
             /home/runner/ollama.log
+            .gate-history/history.jsonl
           retention-days: 14
