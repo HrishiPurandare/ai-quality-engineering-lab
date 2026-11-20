@@ -669,7 +669,7 @@ Budget: one 2-hour session, plus the quiz (45 min).
 | `evals/gate.py` | Reads the eval and red-team `summary.json` files, checks every rule, prints a Markdown table, exits 0 / 1 / 2. |
 | `.github/workflows/quality-gate.yml` | Installs Ollama on the runner, pulls the models, runs the smoke eval and red team, then the gate. |
 
-**Smoke set vs full eval:** CI runners have no GPU, so 42 questions plus a judge would take too long. The smoke set is **13 golden items covering every category** (a unit test enforces that), all passing locally. Because they all passed, any failure is a *regression*. The full 42-item eval and the judge stay manual and periodic.
+**Smoke set vs full eval:** CI runners have no GPU, so 42 questions plus a judge would take too long. The smoke set is **13 golden items covering every category** (a unit test enforces that), all passing locally. Because they all passed, a failure means something moved. Usually that's a regression; sometimes it's the model being flaky (Part 7 shows how to tell). The full 42-item eval and the judge stay manual and periodic.
 
 **Choosing thresholds:** start from measured values, then leave a deliberate margin:
 - Pass rate ≥ 0.90 on 13 items allows **one** failure, because a CPU runner can phrase an answer slightly differently from a laptop GPU, even at temperature 0.
@@ -790,7 +790,7 @@ On GitHub: **Actions → Quality gate → Run workflow**. Open the finished run:
 
 1. It runs the real model on a smoke set of golden questions and the red-team attacks, and fails the build if any quality or safety rule breaks; it runs on changes to app, data, evals, red team or dependencies, nightly, and on demand.
 2. `evals/quality_gate.json`: rules and smoke set. `evals/gate.py`: checks results against the rules and sets the exit code. `.github/workflows/quality-gate.yml`: sets up Ollama in CI and runs eval, red team and gate.
-3. So that any failure is a regression, not a known issue. A gate that's red on day one gets ignored.
+3. So that a failure means something moved (a regression, or flakiness), not a known issue. A gate that's red on day one gets ignored.
 4. One failure is allowed because the CPU runner can word answers slightly differently from the laptop, even at temperature 0. 1.00 would cause false alarms.
 5. 0: all rules pass. 1: at least one rule broke. 2: a metric is missing, which means the pipeline itself is broken.
 6. `pull_request` (block bad changes before merge), `push` to main (record the state of main), `schedule` (catch drift with no commit), `workflow_dispatch` (run on demand).
@@ -802,5 +802,165 @@ On GitHub: **Actions → Quality gate → Run workflow**. Open the finished run:
 12. Probably occasional red builds with no code change: one attack flips because of small non-determinism, and ASR becomes 0.045 > 0.0. That's a false alarm, so the team learns to ignore the gate. Hence ≤ 0.05.
 13. The gate likely fails on pass rate (2 known failures of 15 = 0.87 < 0.90). The right fix: keep known failures out of the gate and track them as bugs. Fix the bot, *then* add them to the smoke set as regression tests.
 14. Your own numbers. In the run on 2026-11-19, pass rate missed by the most (0.69 vs ≥ 0.90, short by 0.21), then cited answers (0.64 vs ≥ 0.80, short by 0.16).
+
+</details>
+
+---
+
+# Part 7: Trend report and drift (Forge90 week 5, day 8)
+
+The gate gives one verdict per run: pass or fail. It can't tell you that quality is *sliding* while still passing, and it can't tell a real regression from the model simply answering differently today. That needs memory: a history of runs, and a careful comparison.
+
+Budget: one 2-hour session, plus the quiz (45 min).
+
+## 44. Key concepts
+
+**Drift:** quality changing over time. Two kinds:
+- **With a cause:** a code or prompt change, a new document, a config change, a new model build (`ollama pull` of the same tag can fetch a different model), a different runner.
+- **Without a cause:** the same inputs give a different answer. That's **flakiness** (non-determinism), and temperature 0 doesn't remove it. Thread scheduling and floating-point order on different hardware can change which token wins a near-tie.
+
+**The real catch that motivated this part.** The nightly run on 2026-11-20 scored 12/13. Same commit as the night before, same retrieved document at the same distance (0.315), temperature 0. `saf-01`'s answer was still *correct*, but it said "According to Ledgerly Bank's security guidelines" instead of the `[1]` citation marker, so the citation check failed it. The gate passed (0.92 ≥ 0.90). Without a history, nobody would have noticed.
+
+**Compare like with like.** Runs are only compared with earlier runs on the **same question set** (`suite_id`: question count plus a hash of the sorted ids). Comparing a 13-question smoke run with the 42-question full eval would invent drift. Attack verdicts are compared only within the same attack set (main vs held-out).
+
+**What `evals/trend.py` flags** (warnings, never failures):
+
+| Signal | Rule |
+|---|---|
+| Metric drop | A gated metric worse than the previous run by more than `tolerance` (0.05). The direction comes from the gate rule: `>=` means higher is better, `<=` lower. |
+| Slow decay | Worse than the **average of the last `window` (5) runs** by more than 0.05, even if each single step was small. |
+| Question flips | Pass → fail (regressed) and fail → pass (fixed). |
+| Attack flips | Defended → broken, and the reverse. |
+| Retrieval moved | The top retrieved document for a question changed: an early sign before answers change. |
+| Latency | Up more than 50%, **only on the same machine** (a CI runner is ~3× slower than the M1, which isn't drift). |
+
+**"What changed?" is the key question.** For every comparison, `what_changed` lists:
+- **code or data:** not the commit hash, but a hash of every file that can change an answer (`app/`, `data/`, golden set, gate config, red team, `requirements.txt`). Each file is hashed the way git hashes it, so the same fingerprint can be computed from the working tree *or* from a past commit (`--inputs-from-commit`). A README-only commit leaves it unchanged.
+- **config:** model names, `top_k`, `max_distance`, guardrails, chunk size.
+- **machine**, **Ollama version**, and the **model files' digests** from Ollama's `/api/tags`. A digest change with the same tag name means someone re-pulled and got a different model.
+
+If verdicts moved and the list is empty → **flaky**. If something is listed → a candidate cause to investigate first.
+
+**Flaky vs regression decides what you do:**
+- Regression: find the change, fix it or revert it.
+- Flaky: don't revert anything. Make the check more robust (e.g. accept a cited source in the answer text, not just `[n]`), make the prompt stricter, or run the item several times and gate on the majority. Track it in the "flaky questions" ledger (`flake_counts`) so you can see which questions are chronically unstable.
+
+**Why warnings, not failures?** The gate already fails on absolute thresholds. Failing on every 0.05 move would make CI red for noise, and a red build that's usually noise gets ignored (Part 6). `--fail-on-drift` exists for teams that want it.
+
+**Keeping history in CI without committing from CI.** A bot that commits results back to the repo makes noisy history and needs write permissions. Instead:
+- `actions/cache/restore` with `restore-keys: gate-history-` gets the **newest** saved history.
+- Each run saves under a **new** key (`gate-history-<run id>`), because caches can't be overwritten.
+- The save step has `if: always()`, because **failing runs are the ones the history most needs**. (The plain `actions/cache` action only saves on success.)
+- The first CI run starts from the committed history.
+- Gotcha found while building this: `hashFiles()` only sees files inside the workspace, so the history lives in `.gate-history/` (gitignored), not `/home/runner`.
+- Limits: caches unused for 7 days are deleted (the nightly run keeps it alive), and the history is also uploaded as an artifact on every run.
+
+**Seeded with real runs, not invented ones.** `evals/history/history.jsonl` starts with the five real runs so far: the 42-question eval before and after guardrails, the local smoke run, and both CI runs (downloaded with `gh run download`). The first red-team run predates `summary.json`, so `build_row` rebuilds the summary from the saved verdicts.
+
+**Mutation check.** Four deliberate bugs: flip the metric direction (3 tests failed), ignore code changes (2 failed), compare latency across machines (1 failed), and hash `__pycache__` files (**0 failed**). The last one survived because the check was dead code: `.pyc` files were already excluded by file type. It was deleted. A mutation that survives means either a missing test or code that doesn't do anything.
+
+## 45. Results (2026-11-20)
+
+| Date | Source | Questions | Pass rate | Cited | ASR | s/answer | Drift verdict |
+|---|---|---|---|---|---|---|---|
+| 11-16 | local M1 | 42 | 0.905 | 0.946 | – | 2.98 | first run |
+| 11-17 | local M1 | 42 | 0.905 | 0.946 | 0.000 | 3.67 | guardrails added, code changed, no drift |
+| 11-19 | local M1 | 13 | 1.000 | 1.000 | 0.000 | 4.58 | first smoke run |
+| 11-19 | CI (push) | 13 | 1.000 | 1.000 | 0.000 | 14.86 | machine changed, no drift |
+| 11-20 | CI (nightly) | 13 | 0.923 | 0.909 | 0.000 | 9.93 | **flaky**: saf-01 pass → fail, nothing changed |
+| 11-20 | local M1 | 13 | 1.000 | 1.000 | 0.000 | 4.29 | saf-01 fixed; machine and gate config changed |
+
+Notes:
+- The local Ollama is 0.40.16; CI pins 0.40.14. That's a real difference between the two environments, now visible in the history.
+- The last run counts as "code or data changed" because `quality_gate.json` (which holds the smoke ids) got the new `drift` settings. The fingerprint is deliberately cautious: it can't tell a smoke-id edit from a tolerance edit.
+
+## 46. Run it
+
+```bash
+python -m evals.run --smoke --guardrails on --out evals/results/smoke
+```
+
+```bash
+python -m redteam.run --guardrails on --out redteam/results/smoke
+```
+
+```bash
+python -m evals.trend record --eval evals/results/smoke --redteam redteam/results/smoke --source local
+```
+
+Then open `evals/history/TREND.md`. Run the three commands a second time without changing anything: did anything flip? If yes, you've just reproduced flakiness yourself.
+
+- [ ] On GitHub: open the next Quality gate run. The drift section is on the summary page under the gate table; any warnings show as yellow annotations.
+
+## 47. Read it, in this order
+
+| # | File | What to understand |
+|---|---|---|
+| 1 | `evals/history/TREND.md` | What the output looks like before reading the code. |
+| 2 | `evals/trend.py` `build_row`, `suite_id`, `inputs_fingerprint` | What one history row holds, and how "same inputs" is decided. |
+| 3 | `evals/trend.py` `compare`, `what_changed`, `Drift.flaky` | The drift rules and the flaky verdict. |
+| 4 | `evals/trend.py` `flake_counts`, `render_trend` | The flaky ledger and the report. |
+| 5 | `tests/unit/test_trend.py` | Each test name is a rule. Note the tests that check drift is NOT raised. |
+| 6 | `.github/workflows/quality-gate.yml` | The restore → record → gate → save steps and why save has `if: always()`. |
+
+## 48. Break it
+
+1. [ ] **Fake a slow decay:** copy `history.jsonl` to `/tmp`, add three rows with smoke pass rates 0.97, 0.94, 0.91 (copy an existing row and edit), then run `python -m evals.trend report --history /tmp/history.jsonl --trend /tmp/TREND.md`. Which warning appears, and which rule produced it?
+2. [ ] **Fix the flaky check:** `saf-01` failed because the model named the source in words instead of `[1]`. Decide: change the prompt, the citation parser, or the metric? Make the change, re-run the smoke set three times, and record each run. Did the flake disappear?
+3. [ ] **Simulate a re-pulled model:** edit the last row's `runtime.models["llama3.2:3b"]` digest in a copy of the history, add a row, and check that "model file" appears in "Changed since then".
+4. [ ] **Turn on `--fail-on-drift`** in the workflow on a branch. Discuss: after the 11-20 nightly, would you want that build red?
+
+## 49. Explain it
+
+1. What's the difference between a quality gate and a trend report? Why do you need both?
+2. A question failed in CI last night with no commits. How do you decide whether it's a regression or flakiness?
+3. Why compare runs only on the same question set? Give an example of fake drift otherwise.
+4. Why hash the input files instead of using the commit hash to decide "nothing changed"?
+5. Temperature is 0. Why can answers still differ between runs?
+6. How do you keep state between CI runs without committing from CI?
+7. Your drift alarm fires every week and nobody acts on it. What do you change?
+
+## 50. Quiz (tonight)
+
+**Part A: concepts (1 point each)**
+
+1. Name the two kinds of drift, with one example of each.
+2. What does `suite_id` protect against?
+3. Why are drift findings warnings, not failures, by default?
+4. Name four things `what_changed` checks.
+5. Why is latency only compared on the same machine?
+6. Why does the CI save step use `if: always()`?
+
+**Part B: read the code (2 points each)**
+
+7. In `compare`, how does the code know that a *higher* `attack_success_rate` is bad?
+8. Previous pass rate 0.95, new 0.92, tolerance 0.05. Any warning? What about previous 1.00, new 0.92?
+9. `sparkline([1.0, 1.0, 0.923])` returns what?
+10. Why does `_blob_id` prefix the file contents with `blob <size>\0`?
+11. In `flake_counts`, which flips are *not* counted, and why?
+
+**Part C: predict, then run (3 points each)**
+
+12. You change only `README.md` and push. Does the quality gate run? If it ran manually, would `what_changed` say "code or data"?
+13. Ollama in CI gets upgraded from 0.40.14 to 0.40.16 and saf-01 flips again. What does the drift section say, and is the run labelled flaky?
+14. History pass rates for one suite: 1.00, 0.97, 0.94. The new run scores 0.91. Which warnings appear, and which don't?
+
+<details>
+<summary>Answers</summary>
+
+1. With a cause: e.g. a prompt change, a new policy document, a re-pulled model, a different runner. Without a cause (flakiness): the same inputs give a different answer, like saf-01 on 2026-11-20.
+2. Comparing runs on different question sets (e.g. 13-question smoke vs 42-question full eval), which would show fake drift purely because the questions differ.
+3. The gate already fails on absolute thresholds. Small moves are often noise, and a build that's red for noise trains people to ignore it. `--fail-on-drift` turns them into failures if a team wants that.
+4. Any four of: code or data (input fingerprint), config (models, top_k, max_distance, guardrails, chunk size), machine, Ollama version, model file digests.
+5. Speed depends on hardware: the CPU runner is ~3× slower than the M1. Comparing them would flag every switch between local and CI as a latency regression.
+6. Failing runs are the most important ones to keep in the history. The plain `actions/cache` action only saves after a successful job.
+7. `higher_is_better` reads the gate rule: its operator is `<=`, so lower is better, and an increase counts as a drop in quality.
+8. 0.95 → 0.92: drop 0.03 ≤ 0.05, no warning (unless the window average makes it slow decay). 1.00 → 0.92: drop 0.08 > 0.05, warning, even though 0.92 still passes the gate.
+9. `"██▁"`: the series is scaled from its own min (0.923 → lowest bar) to max (1.0 → highest bar).
+10. That's exactly how git computes a blob id, so the fingerprint of the working tree equals the fingerprint read from `git ls-tree` for a commit with the same files.
+11. Flips between runs where something changed (code, config, machine, model). Only flips with nothing changed are evidence of flakiness; the others may have a real cause.
+12. No: `README.md` isn't in the workflow's `paths` filter. If run manually: no, `README.md` isn't an input, so the fingerprint is unchanged. That's the point of hashing inputs instead of using the commit.
+13. "Changed since then: ollama: 0.40.14 -> 0.40.16", plus the pass-to-fail warning. It's **not** labelled flaky, because something changed, so the Ollama upgrade is the first suspect (even if, knowing saf-01's history, flakiness is still possible: check the flaky ledger).
+14. No "vs previous run" warning (0.94 → 0.91 is a drop of 0.03). The slow-decay warning fires: the average of the last 3 runs is 0.97, and 0.91 is 0.06 below it. No gate failure either (0.91 ≥ 0.90).
 
 </details>

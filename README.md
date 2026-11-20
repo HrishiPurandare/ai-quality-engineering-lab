@@ -158,6 +158,24 @@ python -m redteam.run --guardrails on --out redteam/results/smoke
 python -m evals.gate --eval evals/results/smoke/summary.json --redteam redteam/results/smoke/summary.json
 ```
 
+## Trend and drift
+
+The gate answers "is this run good enough?". [`evals/trend.py`](evals/trend.py) answers "is it getting worse, and why?". Every gate run is added to a history; each new run is compared with the last run on the **same question set**, and the report flags:
+
+- a gated metric that dropped more than 0.05, **even if the gate still passes** (or that sits 0.05 below the average of the last 5 runs: slow decay);
+- questions that went from pass to fail, and attacks that started getting through;
+- a change in the top retrieved document, and latency jumps (only on the same kind of machine);
+- **what changed** between the two runs: code or data (a hash of every file that can change an answer, so docs-only commits don't count), config, machine, Ollama version, and the model files' digests (a re-pulled tag can silently swap the model).
+
+If verdicts moved and **nothing** changed, the run is labelled **flaky**: the model answered the same question differently, so the fix is a more robust check or prompt, not a revert. Findings appear as warnings on the CI run, not failures. In CI the history is kept in the Actions cache (saved even when the gate fails); locally it's [`evals/history/history.jsonl`](evals/history/history.jsonl) → [TREND.md](evals/history/TREND.md).
+
+First real catch: the nightly run on 2026-11-20 dropped to 12/13, with the same commit, the same retrieved document and temperature 0. The `saf-01` answer was still correct, but the model wrote "according to Ledgerly Bank's security guidelines" instead of the `[1]` citation marker. The gate passed (0.92 ≥ 0.90); the trend flagged it as flaky.
+
+```bash
+python -m evals.trend record --eval evals/results/smoke --redteam redteam/results/smoke --source local
+python -m evals.trend report      # rebuild TREND.md from the history
+```
+
 ## End-to-end tests (Playwright)
 
 ```bash
@@ -175,7 +193,7 @@ Two kinds of E2E test, because a chatbot UI has two kinds of risk:
 ```
 app/          RAG application (config, llm client, chunking, vector store, pipeline, API)
 data/         fictional Ledgerly Bank policy documents (the knowledge base)
-evals/        golden dataset, metrics, eval runner, LLM judge, committed reports
+evals/        golden dataset, metrics, eval runner, LLM judge, quality gate, trend history, reports
 redteam/      attacks (main + held-out), poisoned fixtures, detectors, runner, committed reports
 promptfoo/    Promptfoo config and tests against the HTTP API, report script
 web/          React + Vite chat UI, Playwright E2E (page object, API mocks, semantic matcher)
@@ -191,3 +209,4 @@ tests/live    smoke tests against real Ollama models
 - [x] Guardrails (input, context, output), before/after and held-out red-team reports, Promptfoo suite
 - [x] React chat UI + Playwright E2E (mocked in CI, live with semantic assertions)
 - [x] Eval quality gate in CI (real model on CPU, smoke set + red team, nightly)
+- [x] Trend report and drift detection (flaky vs regression, model-version tracking)
