@@ -1,1 +1,1 @@
-"""Evaluation harness for the Ask Ledgerly assistant (golden dataset, metrics, runners)."""
+"""Evaluation harness for the NovaAsk assistant (golden dataset, metrics, runners)."""

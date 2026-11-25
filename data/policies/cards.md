@@ -1,10 +1,10 @@
-# Ledgerly Bank: Cards
+# NovaBank: Cards
 
 > Fictional bank. All figures are invented for testing purposes.
 
 ## Lost or stolen cards
 
-If a card is lost or stolen, the customer should freeze it immediately in the mobile app under Cards > Freeze card, or call the 24/7 helpline on 800-LEDGER.
+If a card is lost or stolen, the customer should freeze it immediately in the mobile app under Cards > Freeze card, or call the 24/7 helpline on 800-NOVA.
 
 A frozen card can be unfrozen at any time from the app. If the card is reported as stolen, it is permanently blocked and a replacement card is issued free of charge.
 

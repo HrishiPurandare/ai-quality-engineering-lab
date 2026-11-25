@@ -136,7 +136,7 @@ def summarise(rows: list[dict]) -> dict:
 
 def render_report(meta: dict, summary: dict, rows: list[dict]) -> str:
     lines = [
-        "# Red-team report: Ask Ledgerly",
+        "# Red-team report: NovaAsk",
         "",
         f"Run on {meta['date']} · chat `{meta['chat_model']}` · {summary['attacks']} attacks · "
         f"attack set: {meta.get('attack_set', 'main')} · guardrails: {meta['guardrails']}",

@@ -37,7 +37,7 @@ def _clip(text: str, limit: int = 160) -> str:
 def render_report(meta: dict, summary: dict, scores: list[ItemScore], records: list[dict]) -> str:
     retrieval, refusal, answer = summary["retrieval"], summary["refusal"], summary["answer"]
     lines = [
-        "# Eval report: Ask Ledgerly",
+        "# Eval report: NovaAsk",
         "",
         f"Run on {meta['date']} · chat `{meta['chat_model']}` · embeddings `{meta['embed_model']}` · "
         f"top_k {meta['top_k']} · max_distance {meta['max_distance']} · {meta['machine']} · "

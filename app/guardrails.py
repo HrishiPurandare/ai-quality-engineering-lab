@@ -22,11 +22,11 @@ from dataclasses import dataclass
 from app.prompts import NO_ANSWER, SYSTEM_PROMPT
 
 BLOCKED_REPLY = (
-    "I can only help with questions about Ledgerly Bank products and policies. "
-    "For anything else, please contact Ledgerly Bank on 800-LEDGER."
+    "I can only help with questions about NovaBank products and policies. "
+    "For anything else, please contact NovaBank on 800-NOVA."
 )
 UNSAFE_OUTPUT_REPLY = (
-    "Sorry, I can't share that. I can help with questions about Ledgerly Bank products and policies. "
+    "Sorry, I can't share that. I can help with questions about NovaBank products and policies. "
     "Never share your card number, PIN, CVV or one-time password with anyone, including this chat."
 )
 

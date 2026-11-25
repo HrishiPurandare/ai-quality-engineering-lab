@@ -1,1 +1,1 @@
-"""Red-team suite: adversarial prompts against Ask Ledgerly, scored by deterministic detectors."""
+"""Red-team suite: adversarial prompts against NovaAsk, scored by deterministic detectors."""

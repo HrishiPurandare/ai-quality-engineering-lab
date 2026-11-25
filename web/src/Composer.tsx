@@ -29,7 +29,7 @@ export function Composer({ onSend, disabled }: { onSend: (question: string) => v
       <textarea
         id="question"
         data-testid="question-input"
-        placeholder="Ask a question about Ledgerly Bank…"
+        placeholder="Ask a question about NovaBank…"
         rows={2}
         maxLength={MAX_QUESTION_LENGTH}
         value={text}

@@ -1,4 +1,4 @@
-# Ledgerly Bank: Transfers and Limits
+# NovaBank: Transfers and Limits
 
 > Fictional bank. All figures are invented for testing purposes.
 
@@ -12,7 +12,7 @@ Transfers to a newly added beneficiary are limited to AED 10,000 during the firs
 
 ## Processing times
 
-Transfers between Ledgerly Bank accounts are instant, 24/7.
+Transfers between NovaBank accounts are instant, 24/7.
 
 Local transfers to other UAE banks made before 2:00 PM on a business day are credited the same day. Transfers made after 2:00 PM, or on weekends and public holidays, are processed on the next business day.
 
@@ -20,7 +20,7 @@ International SWIFT transfers usually take 1 to 3 business days, depending on th
 
 ## Cancelling a transfer
 
-Instant transfers between Ledgerly Bank accounts cannot be cancelled once confirmed.
+Instant transfers between NovaBank accounts cannot be cancelled once confirmed.
 
 A scheduled transfer can be cancelled from the app until 11:59 PM on the day before its execution date.
 

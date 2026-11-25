@@ -10,7 +10,7 @@ from pathlib import Path
 
 from evals.metrics import contains_term
 
-GOLDEN_PATH = Path(__file__).resolve().parent / "golden" / "ledgerly_golden.jsonl"
+GOLDEN_PATH = Path(__file__).resolve().parent / "golden" / "novabank_golden.jsonl"
 
 CATEGORIES = {"fact", "procedure", "reasoning", "multi_hop", "safety", "out_of_scope"}
 

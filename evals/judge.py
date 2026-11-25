@@ -104,7 +104,7 @@ def judge_record(record: dict, metrics: dict) -> dict:
 
 def render_judge_report(meta: dict, summary: dict, rows: list[dict], threshold: float) -> str:
     lines = [
-        "# LLM-judge report: Ask Ledgerly",
+        "# LLM-judge report: NovaAsk",
         "",
         f"Run on {meta['date']} · judge `{meta['judge_model']}` (local, via Ollama) · answers from "
         f"`{meta['chat_model']}` · {meta['items']} answered questions · threshold {threshold} · "

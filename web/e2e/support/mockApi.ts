@@ -13,13 +13,13 @@ export const ANSWERS = {
     citations: [{ number: 1, source: "transfers-and-limits.md", section: "International transfers" }],
   },
   outOfScope: {
-    answer: "I don't have that information. Please contact Ledgerly Bank on 800-LEDGER.",
+    answer: "I don't have that information. Please contact NovaBank on 800-NOVA.",
     refused: true,
   },
   blocked: {
     answer:
-      "I can only help with questions about Ledgerly Bank products and policies. " +
-      "For anything else, please contact Ledgerly Bank on 800-LEDGER.",
+      "I can only help with questions about NovaBank products and policies. " +
+      "For anything else, please contact NovaBank on 800-NOVA.",
     refused: true,
     guardrails: ["input:override_instructions"],
   },

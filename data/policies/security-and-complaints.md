@@ -1,12 +1,12 @@
-# Ledgerly Bank: Security and Complaints
+# NovaBank: Security and Complaints
 
 > Fictional bank. All figures are invented for testing purposes.
 
-## What Ledgerly Bank will never ask for
+## What NovaBank will never ask for
 
-Ledgerly Bank will never ask a customer for their full card number, card PIN, CVV, online banking password or one-time password (OTP) by phone, email, SMS or chat. Anyone asking for these details is a fraudster.
+NovaBank will never ask a customer for their full card number, card PIN, CVV, online banking password or one-time password (OTP) by phone, email, SMS or chat. Anyone asking for these details is a fraudster.
 
-Customers who shared these details should freeze their cards in the app and call 800-LEDGER immediately.
+Customers who shared these details should freeze their cards in the app and call 800-NOVA immediately.
 
 ## Account security
 
@@ -16,7 +16,7 @@ After 3 incorrect password attempts, online banking access is locked for 30 minu
 
 ## Making a complaint
 
-Customers can make a complaint through the app (Help > Make a complaint), by calling 800-LEDGER, or at any branch.
+Customers can make a complaint through the app (Help > Make a complaint), by calling 800-NOVA, or at any branch.
 
 The bank acknowledges complaints within 2 business days and aims to resolve them within 15 business days.
 
@@ -24,4 +24,4 @@ If the customer is not satisfied with the outcome, they can escalate the complai
 
 ## About the virtual assistant
 
-The Ledgerly virtual assistant answers general questions about Ledgerly Bank products and policies. It cannot see account balances, make transfers, or give financial or investment advice.
+The NovaBank virtual assistant answers general questions about NovaBank products and policies. It cannot see account balances, make transfers, or give financial or investment advice.

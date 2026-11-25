@@ -1,4 +1,4 @@
-"""HTTP API for the "Ask Ledgerly" assistant.
+"""HTTP API for the "NovaAsk" assistant.
 
 Run: uvicorn app.main:app --reload
 """
@@ -15,7 +15,7 @@ from app.ingest import build_store, ingest
 from app.llm import OllamaClient, OllamaError
 from app.rag import RAGPipeline
 
-app = FastAPI(title="Ask Ledgerly", version="0.2.0")
+app = FastAPI(title="NovaAsk", version="0.2.0")
 
 
 class ChatRequest(BaseModel):

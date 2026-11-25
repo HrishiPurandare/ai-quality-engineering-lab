@@ -1,4 +1,4 @@
-# Ledgerly Bank: Accounts and KYC
+# NovaBank: Accounts and KYC
 
 > Fictional bank. All figures are invented for testing purposes.
 

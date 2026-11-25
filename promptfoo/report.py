@@ -21,7 +21,7 @@ def render(data: dict) -> str:
         tests.setdefault(r["testCase"]["description"], {})[r["provider"]["label"]] = r
     totals = {p: sum(r["success"] for r in rows if r["provider"]["label"] == p) for p in providers}
     lines = [
-        "# Promptfoo report: Ask Ledgerly",
+        "# Promptfoo report: NovaAsk",
         "",
         f"Promptfoo calls the real `/chat` API on two servers: {', '.join(f'`{p}`' for p in providers)}.",
         "",

@@ -18,7 +18,7 @@ class Settings:
     embed_model: str = os.getenv("EMBED_MODEL", "nomic-embed-text")
     policies_dir: Path = Path(os.getenv("POLICIES_DIR", ROOT_DIR / "data" / "policies"))
     chroma_dir: Path = Path(os.getenv("CHROMA_DIR", ROOT_DIR / ".chroma"))
-    collection: str = os.getenv("COLLECTION", "ledgerly_policies")
+    collection: str = os.getenv("COLLECTION", "novabank_policies")
     chunk_size: int = int(os.getenv("CHUNK_SIZE", "800"))
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "120"))
     top_k: int = int(os.getenv("TOP_K", "4"))

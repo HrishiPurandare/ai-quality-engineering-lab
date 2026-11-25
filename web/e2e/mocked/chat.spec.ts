@@ -19,7 +19,7 @@ test.describe("chat UI with a mocked API", () => {
     await expect(chat.suggestions).toHaveCount(3);
     await expect(chat.status).toHaveText("Online · 20 policy chunks");
     await expect(chat.sendButton).toBeDisabled();
-    await expect(page).toHaveTitle("Ask Ledgerly");
+    await expect(page).toHaveTitle("NovaAsk");
   });
 
   test("asks a question and shows the answer with its sources", { tag: "@responsive" }, async ({ page }) => {
@@ -94,7 +94,7 @@ test.describe("chat UI with a mocked API", () => {
     await chat.open();
     await chat.ask("What is the home loan rate?");
     const answer = chat.lastAnswer();
-    await expect(answer.refusedBadge).toHaveText("Not covered by Ledgerly policies");
+    await expect(answer.refusedBadge).toHaveText("Not covered by NovaBank policies");
     await expect(answer.sources).toHaveCount(0);
     await expect(answer.root).toHaveAttribute("data-refused", "true");
   });

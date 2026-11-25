@@ -67,7 +67,7 @@ export interface GoldenItem {
 
 /** The same golden dataset the Python evals use: one source of truth for expected answers. */
 export function goldenItems(ids: string[]): GoldenItem[] {
-  const path = fileURLToPath(new URL("../../../evals/golden/ledgerly_golden.jsonl", import.meta.url));
+  const path = fileURLToPath(new URL("../../../evals/golden/novabank_golden.jsonl", import.meta.url));
   const all = readFileSync(path, "utf-8")
     .split("\n")
     .filter((line) => line.trim())

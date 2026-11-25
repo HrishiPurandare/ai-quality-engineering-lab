@@ -1,4 +1,4 @@
-# Ledgerly Bank: Fees and Charges
+# NovaBank: Fees and Charges
 
 > Fictional bank. All figures are invented for testing purposes.
 
@@ -8,19 +8,19 @@ The Everyday Current Account has a monthly maintenance fee of AED 25. The fee is
 
 The Smart Savings Account has no monthly maintenance fee.
 
-The Premier Account has a monthly fee of AED 150, which is waived when the customer holds combined balances of AED 150,000 or more with Ledgerly Bank.
+The Premier Account has a monthly fee of AED 150, which is waived when the customer holds combined balances of AED 150,000 or more with NovaBank.
 
 ## Transfer fees
 
-Transfers between two Ledgerly Bank accounts are free of charge.
+Transfers between two NovaBank accounts are free of charge.
 
 Local transfers to other UAE banks cost AED 2 per transfer when made through the mobile app or online banking, and AED 10 when requested at a branch.
 
-International transfers (SWIFT) cost AED 30 per transfer. Correspondent bank charges may be deducted by intermediary banks and are outside Ledgerly Bank's control.
+International transfers (SWIFT) cost AED 30 per transfer. Correspondent bank charges may be deducted by intermediary banks and are outside NovaBank's control.
 
 ## Card fees
 
-The Ledgerly Classic debit card is free. A replacement card costs AED 35, except when the card is replaced because of suspected fraud, in which case it is free.
+The NovaBank Classic debit card is free. A replacement card costs AED 35, except when the card is replaced because of suspected fraud, in which case it is free.
 
 Foreign currency card transactions carry a 2.5% cross-border fee.
 

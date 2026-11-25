@@ -57,7 +57,7 @@ export function Message({ message }: { message: ChatMessage }) {
         )}
         {response.refused && !notice && (
           <span className="badge badge-muted" data-testid="refused-badge">
-            Not covered by Ledgerly policies
+            Not covered by NovaBank policies
           </span>
         )}
       </div>

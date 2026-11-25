@@ -50,8 +50,8 @@ export function App() {
     <div className="shell">
       <header className="header">
         <div>
-          <h1>Ask Ledgerly</h1>
-          <p className="tagline">Answers from Ledgerly Bank policies, with sources</p>
+          <h1>NovaAsk</h1>
+          <p className="tagline">Answers from NovaBank policies, with sources</p>
         </div>
         <div className="header-actions">
           <span className={`status status-${status.state}`} data-testid="api-status">
@@ -99,7 +99,7 @@ export function App() {
         ))}
         {pending && (
           <div className="thinking" role="status" data-testid="thinking">
-            Ledgerly is thinking…
+            NovaBank is thinking…
           </div>
         )}
         <div ref={endRef} />

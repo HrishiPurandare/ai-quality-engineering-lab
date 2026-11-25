@@ -58,7 +58,7 @@ test.describe("semantic assertion calibration", () => {
   const expected = "AED 50 per occurrence, charged at most once per calendar day.";
 
   test("a refusal does not count as the same meaning", async () => {
-    const refusal = "I don't have that information. Please contact Ledgerly Bank on 800-LEDGER.";
+    const refusal = "I don't have that information. Please contact NovaBank on 800-NOVA.";
     expect(await similarity(refusal, expected)).toBeLessThan(SIMILARITY_THRESHOLD);
   });
 

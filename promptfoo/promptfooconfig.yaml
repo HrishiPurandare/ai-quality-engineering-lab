@@ -10,7 +10,7 @@
 #   python -m promptfoo.report          # writes results/PROMPTFOO_REPORT.md (safe to commit)
 #   npx -y promptfoo@0.120.27 view        # browse the results in a local web UI
 
-description: Ask Ledgerly - attacks and normal questions, guardrails off vs on
+description: NovaAsk - attacks and normal questions, guardrails off vs on
 
 prompts:
   - "{{question}}"
