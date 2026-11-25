@@ -53,6 +53,14 @@ def test_model_saying_no_answer_is_marked_refused(pipeline: RAGPipeline, fake_ll
     assert answer.refused
 
 
+def test_a_refusal_has_no_sources_even_with_a_citation_marker(pipeline: RAGPipeline, fake_llm):
+    # Seen with llama3.2:3b after the bank was renamed: "I don't have that information... [1]".
+    fake_llm.reply = f"{NO_ANSWER} [1]"
+    answer = pipeline.ask("What is the interest rate on a savings account?")
+    assert answer.refused
+    assert answer.citations == []
+
+
 def test_contexts_are_returned_for_evaluation(pipeline: RAGPipeline):
     answer = pipeline.ask("How do I dispute a card transaction?")
     assert answer.contexts

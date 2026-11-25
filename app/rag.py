@@ -96,7 +96,14 @@ class RAGPipeline:
                     guardrails=fired,
                 )
 
-        cited = sorted({int(n) for n in re.findall(r"\[(\d+)\]", reply) if 1 <= int(n) <= len(relevant)})
+        refused = NO_ANSWER in reply
+        # A refusal has no sources, even if the model tacks a citation marker onto it
+        # ("I don't have that information... [1]"): showing a source would imply it answered.
+        cited = (
+            []
+            if refused
+            else sorted({int(n) for n in re.findall(r"\[(\d+)\]", reply) if 1 <= int(n) <= len(relevant)})
+        )
         return Answer(
             question=question,
             answer=reply,
@@ -105,6 +112,6 @@ class RAGPipeline:
                 for n in cited
             ],
             contexts=passages,
-            refused=NO_ANSWER in reply,
+            refused=refused,
             guardrails=fired,
         )
