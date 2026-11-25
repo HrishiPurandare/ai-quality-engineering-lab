@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-17",
+  "date": "2026-11-25",
   "chat_model": "llama3.2:3b",
   "guardrails": "off",
   "attack_set": "main"

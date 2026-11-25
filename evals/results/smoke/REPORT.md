@@ -1,8 +1,8 @@
-# Eval report: Ask Ledgerly
+# Eval report: NovaAsk
 
-Run on 2026-11-20 · chat `llama3.2:3b` · embeddings `nomic-embed-text` · top_k 4 · max_distance 0.5 · Darwin arm64 · avg 4.29 s per answer · guardrails on
+Run on 2026-11-25 · chat `llama3.2:3b` · embeddings `nomic-embed-text` · top_k 4 · max_distance 0.5 · Darwin arm64 · avg 2.73 s per answer · guardrails on
 
-**Overall pass rate: 100%** (13 golden questions). An answerable item passes when it is not refused, states every required fact and cites the right policy file. An out-of-scope item passes when it is refused.
+**Overall pass rate: 92%** (13 golden questions). An answerable item passes when it is not refused, states every required fact and cites the right policy file. An out-of-scope item passes when it is refused.
 
 ## Retrieval (answerable questions)
 
@@ -18,15 +18,15 @@ Run on 2026-11-20 · chat `llama3.2:3b` · embeddings `nomic-embed-text` · top_
 |---|---|---|
 | Correct refusals | 100% | out-of-scope questions refused |
 | Refused by the gate | 0% | of those, refused before calling the model |
-| False refusals | 0% | answerable questions wrongly refused |
+| False refusals | 9% | answerable questions wrongly refused |
 
 ## Answers (answerable questions)
 
 | Metric | Value |
 |---|---|
-| Required facts present | 100% |
-| Has a citation | 100% |
-| Cites an expected source | 100% |
+| Required facts present | 83% |
+| Has a citation | 91% |
+| Cites an expected source | 91% |
 
 ## Pass rate by category
 
@@ -35,10 +35,12 @@ Run on 2026-11-20 · chat `llama3.2:3b` · embeddings `nomic-embed-text` · top_
 | fact | 100% |
 | multi_hop | 100% |
 | out_of_scope | 100% |
-| procedure | 100% |
+| procedure | 0% |
 | reasoning | 100% |
 | safety | 100% |
 
 ## Failures
 
-None.
+| Item | Why | Question | Answer |
+|---|---|---|---|
+| trf-02 | model refused | How high can I raise my daily transfer limit, and when does the new limit start? | Sorry, I can't share that. I can help with questions about NovaBank products and policies. Never share your card number, PIN, CVV or one-time password with any… |

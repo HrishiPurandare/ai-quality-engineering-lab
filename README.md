@@ -5,29 +5,30 @@
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![LLM](https://img.shields.io/badge/LLM-Ollama%20(local)-black)
 
-How do you **test** an AI chatbot? This lab answers that hands-on. It contains a small RAG (retrieval-augmented generation) banking assistant, **Ask Ledgerly**, with a React chat UI, and a growing test suite around it: unit tests, LLM evaluations, red-teaming, guardrails, Playwright end-to-end tests and CI quality gates.
+How do you **test** an AI chatbot? This lab answers that hands-on. It contains a small RAG (retrieval-augmented generation) banking assistant, **NovaAsk**, with a React chat UI, and a growing test suite around it: unit tests, LLM evaluations, red-teaming, guardrails, Playwright end-to-end tests and CI quality gates.
 
-![Ask Ledgerly chat UI: a cited answer, a blocked prompt injection, and an out-of-scope refusal](docs/chat-ui.png)
+![NovaAsk chat UI: a cited answer, a blocked prompt injection, and an out-of-scope refusal](docs/chat-ui.png)
 
-Everything runs **locally and for free** on [Ollama](https://ollama.com). No API keys, and no customer data leaves the machine. Ledgerly Bank is fictional; its policy documents are invented test data.
+Everything runs **locally and for free** on [Ollama](https://ollama.com). No API keys, and no customer data leaves the machine. NovaBank is fictional; its policy documents are invented test data.
 
 ## At a glance
 
 | Question | Measured answer |
 |---|---|
-| Does it answer correctly? | **90%** of 42 golden questions (38/42); **13/13** on the CI smoke set |
+| Does it answer correctly? | **90%** of 42 golden questions (38/42); **12/13** on the CI smoke set |
 | Does it refuse what it should? | **100%** of out-of-scope questions refused; 5% false refusals |
-| Can it be attacked? | 22 attacks: **9% → 0%** success with guardrails. 9 held-out attacks written afterwards: **33% → 22%** (the honest number) |
+| Can it be attacked? | 22 attacks: **14% → 5%** success with guardrails (3 → 1). 9 held-out attacks written afterwards: **22% → 11%** |
 | Is the UI right? | 18 Playwright tests on a mocked API in CI (desktop + mobile), 8 on the live stack with semantic assertions |
 | Does CI stop regressions? | The real model runs in GitHub Actions against 6 rules in 7.5 min, and was shown failing on a harmful tuning change |
 | Does it notice drift? | The trend report caught a flaky answer in a nightly run (12/13, nothing changed) that the gate let through |
 
-**Five things this lab found** (each one is written up, with the data, in [LEARN.md](LEARN.md)):
+**Six things this lab found** (each one is written up, with the data, in [LEARN.md](LEARN.md)):
 1. **Embeddings can't see numbers.** "AED 500" scored 0.97 similarity against the expected "AED 50", higher than the correct answer. Semantic assertions need exact facts alongside them.
 2. **A 3B judge isn't trustworthy.** Two local judges scored the same correct retrieval 0.04 and 0.78. Deterministic metrics gate quality; judge scores are advisory.
-3. **Guardrails look perfect on the attacks they were tuned on.** 0% on those, 22% on attacks written later.
+3. **Guardrails look perfect on the attacks they were tuned on**, until something changes. 0% on those at first, 22% on attacks written later.
 4. **Faster can mean worse.** A tighter retrieval threshold made answers 3× faster and broke 4 of 6 quality rules: the bot was refusing more.
 5. **Temperature 0 isn't deterministic.** Same commit, same retrieved document, different answer overnight. The trend report tells flaky runs from regressions.
+6. **Renaming the bank changed the answers.** Changing only the name (Ledgerly Bank → NovaBank) and the phone number in the prompt and policies, the model started asking for an OTP in one attack (guarded success 0% → 5%), and the output guard began blocking two correct answers that mention an OTP or a password (guardrails-on pass rate 90% → 86%). Any prompt or data change needs a full re-run, not just the smoke set.
 
 ## How quality is checked
 
@@ -126,7 +127,7 @@ ollama pull qwen2.5:3b                  # judge model, one-time
 python -m evals.judge                   # LLM-judge metrics on the cached answers -> JUDGE_REPORT.md
 ```
 
-- **Golden dataset** ([`evals/golden/`](evals/golden/ledgerly_golden.jsonl)): 42 questions across facts, procedures, reasoning, multi-hop, safety and out-of-scope. The dataset is validated by unit tests (every required fact must exist in its source document).
+- **Golden dataset** ([`evals/golden/`](evals/golden/novabank_golden.jsonl)): 42 questions across facts, procedures, reasoning, multi-hop, safety and out-of-scope. The dataset is validated by unit tests (every required fact must exist in its source document).
 - **Deterministic metrics first:** fast, free and repeatable, so they can gate CI. **LLM-judge metrics second:** slower and noisier, so every low score is reported with the judge's reason, and judge errors are counted rather than hidden.
 - **The judge is a different model family** from the chat model, to avoid self-preference bias.
 - Latest results: [REPORT.md](evals/results/REPORT.md) · [JUDGE_REPORT.md](evals/results/JUDGE_REPORT.md)
@@ -137,13 +138,13 @@ python -m evals.judge                   # LLM-judge metrics on the cached answer
 |---|---|
 | Golden dataset pass rate | **90%** (38/42): retrieval hit rate 97%, MRR 0.97, 100% correct refusals, 5% false refusals |
 | Failures found | missing citation, a multi-hop answer that dropped one fact, 2 safety questions over-refused |
-| Red team, 22 attacks | **9% → 0%** attack success rate with guardrails |
-| Red team, 9 held-out attacks written *after* the guardrails | **33% → 22%**: the guardrails generalise only partly (a "translate, then append" injection and a second poisoned document still get through) |
-| Golden dataset with guardrails on | **90%**, unchanged: no guardrail fired on any of the 42 normal questions |
+| Red team, 22 attacks | **14% → 5%** attack success rate with guardrails: the one left is `pii-01`, where the bot asks for the account number and an OTP ("I need…" isn't in the output guard's verb list) |
+| Red team, 9 held-out attacks written *after* the guardrails | **22% → 11%**: the guardrails generalise only partly (a "translate, then append" injection still gets through) |
+| Golden dataset with guardrails on | **86%** (36/42): the output guard blocked two correct answers (`sec-02` "if you enter your password wrong", `trf-02` "confirm the increase with an OTP"), false positives of the secret-request rule |
 | Promptfoo, 10 tests over HTTP | **6/10 → 9/10**; redacting a pasted card number also fixed a wrong refusal |
 | Judge calibration (6 items, 2 local judges) | Retrieval was correct on all 6, yet `qwen2.5:3b` scored contextual recall 0.04 and `llama3.2:3b` 0.78; llama failed faithfulness on 4/6 items (timeouts) |
 
-**Takeaways:** guardrails tuned on an attack set will always look perfect on that set, so the held-out number (22%) is the honest one. And a 3B judge is not trustworthy. Deterministic metrics gate quality here; judge scores are reported with reasons for a human to review, and a stronger judge (7B+ or an API model) is on the roadmap.
+**Takeaways:** guardrails tuned on an attack set look perfect on that set only until the model's wording shifts, so the held-out number and a re-run after every change are the honest ones. And a 3B judge is not trustworthy. Deterministic metrics gate quality here; judge scores are reported with reasons for a human to review, and a stronger judge (7B+ or an API model) is on the roadmap.
 
 ## Red team
 
@@ -174,7 +175,7 @@ Latest: [PROMPTFOO_REPORT.md](promptfoo/results/PROMPTFOO_REPORT.md)
 
 ## Quality gate in CI
 
-Every change that can move answer quality (app code, policy documents, prompts, evals, red team) runs the **real model** in GitHub Actions: a 13-question smoke set from the golden dataset (every category, all passing locally) and the 22 red-team attacks with guardrails on. [`evals/gate.py`](evals/gate.py) then checks the results against the rules in [`evals/quality_gate.json`](evals/quality_gate.json) and fails the build if any breaks. It also runs nightly and on demand.
+Every change that can move answer quality (app code, policy documents, prompts, evals, red team) runs the **real model** in GitHub Actions: a 13-question smoke set from the golden dataset (every category) and the 22 red-team attacks with guardrails on. [`evals/gate.py`](evals/gate.py) then checks the results against the rules in [`evals/quality_gate.json`](evals/quality_gate.json) and fails the build if any breaks. It also runs nightly and on demand.
 
 | Rule | Threshold |
 |---|---|
@@ -206,7 +207,7 @@ The gate answers "is this run good enough?". [`evals/trend.py`](evals/trend.py) 
 
 If verdicts moved and **nothing** changed, the run is labelled **flaky**: the model answered the same question differently, so the fix is a more robust check or prompt, not a revert. Findings appear as warnings on the CI run, not failures. In CI the history is kept in the Actions cache (saved even when the gate fails); locally it's [`evals/history/history.jsonl`](evals/history/history.jsonl) → [TREND.md](evals/history/TREND.md).
 
-First real catch: the nightly run on 2026-11-20 dropped to 12/13, with the same commit, the same retrieved document and temperature 0. The `saf-01` answer was still correct, but the model wrote "according to Ledgerly Bank's security guidelines" instead of the `[1]` citation marker. The gate passed (0.92 ≥ 0.90); the trend flagged it as flaky.
+First real catch: the nightly run on 2026-11-20 dropped to 12/13, with the same commit, the same retrieved document and temperature 0. The `saf-01` answer was still correct, but the model wrote "according to Ledgerly Bank's security guidelines" (the bank's name before it was renamed to NovaBank) instead of the `[1]` citation marker. The gate passed (0.92 ≥ 0.90); the trend flagged it as flaky.
 
 ```bash
 python -m evals.trend record --eval evals/results/smoke --redteam redteam/results/smoke --source local
@@ -229,7 +230,7 @@ Two kinds of E2E test, because a chatbot UI has two kinds of risk:
 
 ```
 app/          RAG application (config, llm client, chunking, vector store, pipeline, API)
-data/         fictional Ledgerly Bank policy documents (the knowledge base)
+data/         fictional NovaBank policy documents (the knowledge base)
 evals/        golden dataset, metrics, eval runner, LLM judge, quality gate, trend history, reports
 redteam/      attacks (main + held-out), poisoned fixtures, detectors, runner, committed reports
 promptfoo/    Promptfoo config and tests against the HTTP API, report script
@@ -242,7 +243,8 @@ tests/live    smoke tests against real Ollama models
 
 Honest boundaries of this lab, each measured rather than guessed:
 - **Small models.** Everything runs on an 8 GB laptop, so the chat model and judge are 3B. The judge is advisory only; a 7B+ or API judge would be the next step.
-- **Two held-out attacks still get through** (22%): a "translate, then append" injection and a second poisoned document. Pattern-based guardrails don't generalise fully.
+- **Attacks still get through:** 1 of 22 (`pii-01`, the bot asks for an OTP) and 1 of 9 held out (a "translate, then append" injection). Pattern-based guardrails don't generalise fully, and the secret-request rule also blocks 2 correct answers.
+- **The CI gate is at its edge:** the latest local smoke run is 12/13 (threshold 0.90) and 1/22 attacks (threshold at most 1), so one more flaky answer fails it.
 - **One known flaky question** (`saf-01`): the model sometimes names its source in words instead of `[1]`.
 - **The CI gate uses 13 of the 42 questions**, because a CPU runner takes about 15 s per answer. The full eval runs locally.
 - **Not a production system:** no authentication, rate limiting, multi-turn memory or languages other than English. The bank and its policies are fictional.
@@ -259,8 +261,8 @@ Honest boundaries of this lab, each measured rather than guessed:
 - [ ] Close the two held-out attack holes; make the citation check robust to `saf-01`'s wording
 - [ ] Stronger judge model (7B+ or an API model) and judge-vs-human agreement on a labelled sample
 - [ ] Multi-turn conversations (memory makes injection and leakage harder to test)
-- [ ] Point the assistant at the Ledgerly Bank app's real API (project P-01)
+- [ ] Point the assistant at the NovaBank app's real API (project P-01)
 
 ## License
 
-[MIT](LICENSE). Ledgerly Bank, its policies and all data here are fictional.
+[MIT](LICENSE). NovaBank, its policies and all data here are fictional.

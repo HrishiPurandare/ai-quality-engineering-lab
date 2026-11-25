@@ -1,35 +1,35 @@
 {
   "meta": {
-    "date": "2026-11-16",
+    "date": "2026-11-25",
     "judge_model": "qwen2.5:3b",
     "chat_model": "llama3.2:3b",
     "items": 35,
-    "minutes": 37.8
+    "minutes": 40.9
   },
   "summary": {
     "faithfulness": {
-      "mean": 0.563,
-      "pass_rate": 0.486,
-      "judged": 35,
-      "errors": 0
+      "mean": 0.578,
+      "pass_rate": 0.515,
+      "judged": 33,
+      "errors": 2
     },
     "answer_relevancy": {
-      "mean": 0.417,
-      "pass_rate": 0.114,
-      "judged": 35,
-      "errors": 0
-    },
-    "contextual_precision": {
-      "mean": 0.136,
+      "mean": 0.439,
       "pass_rate": 0.086,
       "judged": 35,
       "errors": 0
     },
-    "contextual_recall": {
-      "mean": 0.099,
-      "pass_rate": 0.029,
+    "contextual_precision": {
+      "mean": 0.1,
+      "pass_rate": 0.057,
       "judged": 35,
       "errors": 0
+    },
+    "contextual_recall": {
+      "mean": 0.024,
+      "pass_rate": 0.0,
+      "judged": 31,
+      "errors": 4
     }
   }
 }

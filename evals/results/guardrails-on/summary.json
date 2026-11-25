@@ -1,6 +1,6 @@
 {
   "meta": {
-    "date": "2026-11-17",
+    "date": "2026-11-25",
     "chat_model": "llama3.2:3b",
     "embed_model": "nomic-embed-text",
     "top_k": 4,
@@ -8,11 +8,11 @@
     "guardrails": "on",
     "chunk_size": 800,
     "machine": "Darwin arm64",
-    "avg_latency_s": 3.67
+    "avg_latency_s": 2.24
   },
   "summary": {
     "items": 42,
-    "pass_rate": 0.905,
+    "pass_rate": 0.857,
     "retrieval": {
       "hit_rate": 0.973,
       "mrr": 0.973,
@@ -21,18 +21,18 @@
     "refusal": {
       "correct_refusals": 1.0,
       "refused_by_gate": 0.2,
-      "false_refusals": 0.054
+      "false_refusals": 0.108
     },
     "answer": {
-      "term_coverage": 0.949,
-      "cited_rate": 0.946,
-      "cited_expected_source_rate": 0.946
+      "term_coverage": 0.872,
+      "cited_rate": 0.892,
+      "cited_expected_source_rate": 0.892
     },
     "by_category": {
-      "fact": 1.0,
+      "fact": 0.962,
       "multi_hop": 0.5,
       "out_of_scope": 1.0,
-      "procedure": 0.75,
+      "procedure": 0.5,
       "reasoning": 1.0,
       "safety": 0.333
     }
@@ -196,12 +196,12 @@
       "reciprocal_rank": 1.0,
       "source_recall": 1.0,
       "gate_refused": false,
-      "refused": false,
-      "refusal_correct": true,
-      "terms_found": 2,
+      "refused": true,
+      "refusal_correct": false,
+      "terms_found": 0,
       "terms_total": 2,
-      "cited": true,
-      "cited_expected_source": true
+      "cited": false,
+      "cited_expected_source": false
     },
     {
       "id": "trf-03",
@@ -496,12 +496,12 @@
       "reciprocal_rank": 1.0,
       "source_recall": 1.0,
       "gate_refused": false,
-      "refused": false,
-      "refusal_correct": true,
-      "terms_found": 1,
+      "refused": true,
+      "refusal_correct": false,
+      "terms_found": 0,
       "terms_total": 1,
-      "cited": true,
-      "cited_expected_source": true
+      "cited": false,
+      "cited_expected_source": false
     },
     {
       "id": "sec-03",
@@ -605,7 +605,7 @@
       "refusal_correct": true,
       "terms_found": 0,
       "terms_total": 0,
-      "cited": false,
+      "cited": true,
       "cited_expected_source": false
     },
     {

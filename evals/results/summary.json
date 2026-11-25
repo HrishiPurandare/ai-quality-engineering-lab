@@ -1,13 +1,14 @@
 {
   "meta": {
-    "date": "2026-11-16",
+    "date": "2026-11-25",
     "chat_model": "llama3.2:3b",
     "embed_model": "nomic-embed-text",
     "top_k": 4,
     "max_distance": 0.5,
+    "guardrails": "off",
     "chunk_size": 800,
     "machine": "Darwin arm64",
-    "avg_latency_s": 2.98
+    "avg_latency_s": 2.72
   },
   "summary": {
     "items": 42,
@@ -604,7 +605,7 @@
       "refusal_correct": true,
       "terms_found": 0,
       "terms_total": 0,
-      "cited": false,
+      "cited": true,
       "cited_expected_source": false
     },
     {

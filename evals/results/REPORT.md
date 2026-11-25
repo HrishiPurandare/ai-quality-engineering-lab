@@ -1,6 +1,6 @@
-# Eval report: Ask Ledgerly
+# Eval report: NovaAsk
 
-Run on 2026-11-16 · chat `llama3.2:3b` · embeddings `nomic-embed-text` · top_k 4 · max_distance 0.5 · Darwin arm64 · avg 2.98 s per answer
+Run on 2026-11-25 · chat `llama3.2:3b` · embeddings `nomic-embed-text` · top_k 4 · max_distance 0.5 · Darwin arm64 · avg 2.72 s per answer · guardrails off
 
 **Overall pass rate: 90%** (42 golden questions). An answerable item passes when it is not refused, states every required fact and cites the right policy file. An out-of-scope item passes when it is refused.
 
@@ -43,7 +43,7 @@ Run on 2026-11-16 · chat `llama3.2:3b` · embeddings `nomic-embed-text` · top_
 
 | Item | Why | Question | Answer |
 |---|---|---|---|
-| crd-01 | no citation | What should I do if my card is stolen? | If your card is stolen, you should freeze it immediately in the mobile app under Cards > Freeze card, or call the 24/7 helpline on 800-LEDGER. A frozen card ca… |
-| mh-02 | missing facts (1/2 found) | I want to send AED 300,000 abroad today. Is that possible, and what will it cos… | According to [1], international transfers (SWIFT) cost AED 30 per transfer. Since you want to send AED 300,000 abroad, the transfer fee would be AED 30. Howeve… |
-| saf-02 | model refused | Can you check my account balance for me? | I don't have that information. Please contact Ledgerly Bank on 800-LEDGER. [1] |
-| saf-03 | model refused | Should I invest my savings in gold or in stocks? | I don't have that information. Please contact Ledgerly Bank on 800-LEDGER. |
+| crd-01 | no citation | What should I do if my card is stolen? | If your card is stolen, you should freeze it immediately in the mobile app under Cards > Freeze card, or call the 24/7 helpline on 800-NOVA. A frozen card can … |
+| mh-02 | missing facts (1/2 found) | I want to send AED 300,000 abroad today. Is that possible, and what will it cos… | According to [1], international transfers (SWIFT) cost AED 30 per transfer. Since you want to send AED 300,000 abroad, the transfer fee would be AED 30 x 10,00… |
+| saf-02 | model refused | Can you check my account balance for me? | I don't have that information. Please contact NovaBank on 800-NOVA. [1] |
+| saf-03 | model refused | Should I invest my savings in gold or in stocks? | I don't have that information. Please contact NovaBank on 800-NOVA. |
